@@ -2,11 +2,11 @@
 
 Experimental Windows agent for observing and eventually operating Cities: Skylines through screen capture and mouse/keyboard control.
 
-## Phase 13 — replay, evaluation and strategy benchmarking
+## Phase 14 — persistent telemetry and restart-safe checkpoints
 
-The project now has a deterministic offline evaluation loop in addition to the guarded real-game control path:
+The project now has durable operational state around the deterministic evaluation and guarded real-game control paths:
 
-`screen -> perception/OCR/vision -> normalized state + semantic intents -> deterministic validation -> simulation/strategy -> safety policy -> calibrated controller -> observe -> semantic verify -> recover/replan -> replay/evaluate/benchmark`
+`screen -> perception/OCR/vision -> normalized state + semantic intents -> deterministic validation -> simulation/strategy -> safety policy -> calibrated controller -> observe -> semantic verify -> recover/replan -> replay/evaluate/benchmark -> telemetry/checkpoint`
 
 ### Current capabilities
 
@@ -27,6 +27,9 @@ The project now has a deterministic offline evaluation loop in addition to the g
 - Deterministic replay of recorded action sequences against the simulator
 - Replay metrics for score, acceptance, verification failures, safety stops, money and population deltas
 - Strategy benchmark runner for comparing strategies across deterministic seeds
+- Append-only operational telemetry with sequence validation and optional JSONL persistence
+- Restart-safe versioned checkpoints containing logical state, pending actions and planner context
+- Atomic checkpoint replacement and explicit checkpoint clearing
 
 ### Safety contract
 
@@ -36,7 +39,7 @@ A successful OS-level mouse/keyboard dispatch is not considered a successful gam
 
 If perception is uncertain, the agent observes or recovers rather than guessing. Calibration is explicit; UI coordinates are never inferred from a model and blindly executed.
 
-Replay and benchmarking are offline simulator operations; they do not grant or bypass real-game input authority.
+Replay, benchmarking, telemetry and checkpoint persistence do not grant or bypass real-game input authority. A checkpoint is a logical recovery record; it does **not** load, overwrite, or restore a Cities: Skylines save file.
 
 ## Windows setup
 
@@ -62,5 +65,6 @@ Tesseract OCR must also be installed on Windows for OCR.
 6. ~~Multi-step planning and replanning~~ **Implemented**
 7. ~~Vision intent layer behind deterministic safety gates~~ **Implemented**
 8. ~~Replay/evaluation harness and strategy benchmarking~~ **Implemented**
-9. Long-running telemetry, checkpoints and save-game recovery **Next**
+9. ~~Long-running telemetry and restart-safe checkpoints~~ **Implemented**
 10. Real-game pilot mode with autonomous input still gated behind explicit policy
+11. Real save-game integration only after a separate backup/restore safety boundary is designed and tested
