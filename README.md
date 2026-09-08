@@ -2,11 +2,11 @@
 
 Experimental Windows agent for observing and eventually operating Cities: Skylines through screen capture and mouse/keyboard control.
 
-## Phase 14 — persistent telemetry and restart-safe checkpoints
+## Phase 15 — controlled real-game pilot infrastructure
 
-The project now has durable operational state around the deterministic evaluation and guarded real-game control paths:
+The project now adds a hard pilot boundary around the existing planner/controller path:
 
-`screen -> perception/OCR/vision -> normalized state + semantic intents -> deterministic validation -> simulation/strategy -> safety policy -> calibrated controller -> observe -> semantic verify -> recover/replan -> replay/evaluate/benchmark -> telemetry/checkpoint`
+`screen -> perception/OCR/vision -> normalized state + semantic intents -> deterministic validation -> simulation/strategy -> safety policy -> pilot preflight -> calibrated controller -> observe -> semantic verify -> recover/replan -> replay/evaluate/benchmark -> telemetry/checkpoint`
 
 ### Current capabilities
 
@@ -30,10 +30,15 @@ The project now has durable operational state around the deterministic evaluatio
 - Append-only operational telemetry with sequence validation and optional JSONL persistence
 - Restart-safe versioned checkpoints containing logical state, pending actions and planner context
 - Atomic checkpoint replacement and explicit checkpoint clearing
+- Controlled real-game pilot guard with game-detection, foreground, calibration and pause preflight gates
+- Dry-run controller that records intended actions without dispatching mouse/keyboard input
+- Per-cycle pilot action budget and hard halt state
 
 ### Safety contract
 
 The controller will not send non-read-only input unless the corresponding safety policy is explicitly enabled. Destructive actions require separate explicit permission. Model-generated or vision-generated intents are **never** trusted as execution authority.
+
+The pilot layer adds independent preflight gates: the game must be detected, be the foreground application, have resolution-matched calibration, and normally be paused before input. Dry-run mode is the default and intentionally blocks real input.
 
 A successful OS-level mouse/keyboard dispatch is not considered a successful game action. Semantic state deltas are preferred. Generic screen changes are low-confidence evidence and cannot satisfy the default verification threshold.
 
@@ -66,5 +71,6 @@ Tesseract OCR must also be installed on Windows for OCR.
 7. ~~Vision intent layer behind deterministic safety gates~~ **Implemented**
 8. ~~Replay/evaluation harness and strategy benchmarking~~ **Implemented**
 9. ~~Long-running telemetry and restart-safe checkpoints~~ **Implemented**
-10. Real-game pilot mode with autonomous input still gated behind explicit policy
+10. ~~Controlled real-game pilot infrastructure~~ **Implemented**
 11. Real save-game integration only after a separate backup/restore safety boundary is designed and tested
+12. Calibrated semantic-to-input compiler and real-game state verification
