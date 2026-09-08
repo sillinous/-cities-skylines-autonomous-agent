@@ -15,11 +15,7 @@ class CompileResult:
 
 
 class IntentCompiler:
-    """Compile semantic intents into calibrated typed actions.
-
-    This layer never dispatches OS input. Safety policy and pilot preflight
-    remain downstream authorities.
-    """
+    """Compile semantic intents into calibrated typed actions without dispatching."""
 
     def __init__(self, calibration: Calibration):
         self.mapper = CitiesSkylinesActionMapper(calibration)
@@ -38,9 +34,13 @@ class IntentCompiler:
                     raise ValueError("construction intent requires point and end")
                 return CompileResult(self.mapper.build_road(BuildSpec(intent.point, intent.end, intent.target or "road")), "Compiled construction intent.")
             if intent.kind == IntentKind.UTILITY:
-                return CompileResult(self.mapper.utility(intent.target), "Compiled utility intent.")
+                if intent.point is None:
+                    raise ValueError("utility intent requires point")
+                return CompileResult(self.mapper.utility(intent.target, intent.point), "Compiled utility placement intent.")
             if intent.kind == IntentKind.SERVICE:
-                return CompileResult(self.mapper.service(intent.target), "Compiled service intent.")
+                if intent.point is None:
+                    raise ValueError("service intent requires point")
+                return CompileResult(self.mapper.service(intent.target, intent.point), "Compiled service placement intent.")
             if intent.kind == IntentKind.BULLDOZE:
                 if intent.point is None:
                     raise ValueError("bulldoze intent requires point")
@@ -48,6 +48,8 @@ class IntentCompiler:
             if intent.kind == IntentKind.BUDGET:
                 if intent.value is None:
                     raise ValueError("budget intent requires value")
+                if not float(intent.value).is_integer():
+                    raise ValueError("budget value must be an integer percentage")
                 return CompileResult(self.mapper.budget(intent.target, int(intent.value)), "Compiled budget intent.")
             if intent.kind == IntentKind.CAMERA:
                 if intent.point is None:
