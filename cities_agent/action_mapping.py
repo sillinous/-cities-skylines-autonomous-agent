@@ -15,7 +15,11 @@ class BuildSpec:
 
 
 class CitiesSkylinesActionMapper:
-    """Map semantic intents to calibrated input actions."""
+    """Map semantic intents to calibrated low-level input actions.
+
+    Required tool anchors are deliberately supplied by calibration rather than
+    guessed here. This keeps the mapper portable across UI scale/resolution.
+    """
 
     def __init__(self, calibration: Calibration):
         self.calibration = calibration
@@ -34,9 +38,8 @@ class CitiesSkylinesActionMapper:
         x1, y1 = self._pixel(spec.start)
         x2, y2 = self._pixel(spec.end)
         return (
-            Action(ActionType.SELECT_TOOL, (spec.road_type,), SafetyClass.REVERSIBLE, expected_effect=f"Select {spec.road_type} road tool."),
-            Action(ActionType.BUILD_ROAD, (spec.road_type, spec.start, spec.end), SafetyClass.REVERSIBLE, expected_effect="Draw the requested road segment."),
-            Action(ActionType.DRAG, (x1, y1, x2, y2), SafetyClass.REVERSIBLE, expected_effect="Dispatch the calibrated road drag."),
+            self.select_tool(f"road:{spec.road_type}"),
+            Action(ActionType.DRAG, (x1, y1, x2, y2), SafetyClass.REVERSIBLE, expected_effect="Draw the requested road segment."),
         )
 
     def zone(self, zone_type: str, point: tuple[float, float]) -> tuple[Action, ...]:
@@ -45,30 +48,34 @@ class CitiesSkylinesActionMapper:
         if normalized not in {"residential", "commercial", "industrial"}:
             raise ValueError("zone_type must be residential, commercial, or industrial")
         return (
-            Action(ActionType.SELECT_TOOL, (f"zone:{normalized}",), SafetyClass.REVERSIBLE, expected_effect=f"Select {normalized} zoning tool."),
-            Action(ActionType.ZONE, (normalized, point), SafetyClass.REVERSIBLE, expected_effect=f"Apply {normalized} zoning."),
-            Action(ActionType.CLICK, self._pixel(point), SafetyClass.REVERSIBLE, expected_effect=f"Dispatch zoning click for {normalized}."),
+            self.select_tool(f"zone:{normalized}"),
+            Action(ActionType.CLICK, self._pixel(point), SafetyClass.REVERSIBLE, expected_effect=f"Apply {normalized} zoning."),
         )
 
-    def utility(self, utility: str) -> Action:
+    def utility(self, utility: str) -> tuple[Action, ...]:
         utility = utility.lower()
         if utility not in {"power", "water", "sewage"}:
             raise ValueError("utility must be power, water, or sewage")
-        return Action(ActionType.UTILITY, (utility,), SafetyClass.REVERSIBLE, expected_effect=f"Restore {utility} service.")
+        return (self.select_tool(f"utility:{utility}"),)
 
-    def service(self, service: str) -> Action:
+    def service(self, service: str) -> tuple[Action, ...]:
         if not service.strip():
             raise ValueError("service must not be empty")
-        return Action(ActionType.SERVICE, (service.lower(),), SafetyClass.REVERSIBLE, expected_effect=f"Improve {service} coverage.")
+        return (self.select_tool(f"service:{service.lower()}"),)
 
-    def bulldoze(self, point: tuple[float, float]) -> Action:
+    def bulldoze(self, point: tuple[float, float]) -> tuple[Action, ...]:
         self._validate_point(point)
-        return Action(ActionType.BULLDOZE, (self._pixel(point),), SafetyClass.DESTRUCTIVE, expected_effect="Remove the targeted construction.")
+        return (
+            self.select_tool("bulldoze"),
+            Action(ActionType.CLICK, self._pixel(point), SafetyClass.DESTRUCTIVE, expected_effect="Remove the targeted construction."),
+        )
 
-    def budget(self, category: str, percentage: int) -> Action:
+    def budget(self, category: str, percentage: int) -> tuple[Action, ...]:
         if not 0 <= percentage <= 150:
             raise ValueError("budget percentage must be between 0 and 150")
-        return Action(ActionType.BUDGET, (category.lower(), percentage), SafetyClass.REVERSIBLE, expected_effect=f"Set {category} budget to {percentage}%.")
+        # The exact budget slider interaction is UI-profile-specific. Returning
+        # a semantic action lets a concrete controller implement the calibrated UI.
+        return (Action(ActionType.BUDGET, (category.lower(), percentage), SafetyClass.REVERSIBLE, expected_effect=f"Set {category} budget to {percentage}%."),)
 
     def _pixel(self, point: tuple[float, float]) -> tuple[int, int]:
         return round(point[0] * self.calibration.width), round(point[1] * self.calibration.height)
