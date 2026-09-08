@@ -20,6 +20,7 @@ class CityState:
     water_ok: Optional[bool] = None
     sewage_ok: Optional[bool] = None
     service_coverage: dict[str, float] = field(default_factory=dict)
+    budgets: dict[str, int] = field(default_factory=dict)
     warnings: tuple[str, ...] = ()
     confidence: dict[str, float] = field(default_factory=dict)
 
