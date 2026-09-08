@@ -7,11 +7,7 @@ from .policy import SafetyPolicy
 
 
 class SafetyController:
-    """Execute only policy-authorized low-level input and report dispatch status.
-
-    A successful pyautogui call means only that the OS input was dispatched; it
-    is deliberately not treated as game verification.
-    """
+    """Execute only policy-authorized low-level input and report dispatch status."""
 
     def __init__(self, policy: SafetyPolicy | None = None, *, allow_input: bool | None = None):
         if policy is None:
@@ -40,6 +36,10 @@ class SafetyController:
                     raise ValueError("camera requires x, y")
                 pyautogui.moveTo(*action.args, duration=0.15)
             elif action.type == ActionType.CLICK:
+                pyautogui.click(*action.args)
+            elif action.type == ActionType.SELECT_TOOL:
+                if len(action.args) != 2:
+                    raise ValueError("select_tool requires calibrated x, y")
                 pyautogui.click(*action.args)
             elif action.type == ActionType.DRAG:
                 if len(action.args) != 4:
