@@ -2,11 +2,11 @@
 
 Experimental Windows agent for observing and eventually operating Cities: Skylines through screen capture and mouse/keyboard control.
 
-## Phase 12 — vision intent and deterministic safety gates
+## Phase 13 — replay, evaluation and strategy benchmarking
 
-The project now has an explicit boundary between visual/model interpretation and game control:
+The project now has a deterministic offline evaluation loop in addition to the guarded real-game control path:
 
-`screen -> perception/OCR/vision -> normalized state + semantic intents -> deterministic validation -> simulation/strategy -> safety policy -> calibrated controller -> observe -> semantic verify -> recover/replan`
+`screen -> perception/OCR/vision -> normalized state + semantic intents -> deterministic validation -> simulation/strategy -> safety policy -> calibrated controller -> observe -> semantic verify -> recover/replan -> replay/evaluate/benchmark`
 
 ### Current capabilities
 
@@ -23,6 +23,10 @@ The project now has an explicit boundary between visual/model interpretation and
 - Semantic construction and calibrated action mapping
 - Transactional plan executor with verification, retries and emergency stop
 - Recovery state machine, audit history and GitHub Actions CI
+- Append-only JSONL replay episodes that preserve actions, states and verification outcomes
+- Deterministic replay of recorded action sequences against the simulator
+- Replay metrics for score, acceptance, verification failures, safety stops, money and population deltas
+- Strategy benchmark runner for comparing strategies across deterministic seeds
 
 ### Safety contract
 
@@ -31,6 +35,8 @@ The controller will not send non-read-only input unless the corresponding safety
 A successful OS-level mouse/keyboard dispatch is not considered a successful game action. Semantic state deltas are preferred. Generic screen changes are low-confidence evidence and cannot satisfy the default verification threshold.
 
 If perception is uncertain, the agent observes or recovers rather than guessing. Calibration is explicit; UI coordinates are never inferred from a model and blindly executed.
+
+Replay and benchmarking are offline simulator operations; they do not grant or bypass real-game input authority.
 
 ## Windows setup
 
@@ -55,6 +61,6 @@ Tesseract OCR must also be installed on Windows for OCR.
 5. ~~Semantic construction layer~~ **Implemented**
 6. ~~Multi-step planning and replanning~~ **Implemented**
 7. ~~Vision intent layer behind deterministic safety gates~~ **Implemented**
-8. Replay/evaluation harness and strategy benchmarking **Next**
-9. Long-running telemetry, checkpoints and save-game recovery
+8. ~~Replay/evaluation harness and strategy benchmarking~~ **Implemented**
+9. Long-running telemetry, checkpoints and save-game recovery **Next**
 10. Real-game pilot mode with autonomous input still gated behind explicit policy
