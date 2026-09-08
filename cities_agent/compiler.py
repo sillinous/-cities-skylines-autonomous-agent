@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from .action_mapping import BuildSpec, CitiesSkylinesActionMapper
-from .actions import Action, SafetyClass
+from .actions import Action, ActionType, SafetyClass
 from .calibration import Calibration
 from .intent import Intent, IntentKind
 
@@ -15,21 +15,20 @@ class CompileResult:
 
 
 class IntentCompiler:
-    """Compile validated semantic intents into calibrated low-level actions.
+    """Compile semantic intents into calibrated typed actions.
 
-    The compiler has no OS-input capability. It only produces typed actions;
-    the safety policy, pilot guard, controller and verifier remain downstream.
+    This layer never dispatches OS input. Safety policy and pilot preflight
+    remain downstream authorities.
     """
 
     def __init__(self, calibration: Calibration):
         self.mapper = CitiesSkylinesActionMapper(calibration)
 
     def compile(self, intent: Intent) -> CompileResult:
-        if intent.confidence < 0.80:
-            return CompileResult((), "Intent confidence is below the execution threshold.")
         try:
+            intent.validate()
             if intent.kind == IntentKind.OBSERVE:
-                return CompileResult((Action(type=__import__('cities_agent.actions', fromlist=['ActionType']).ActionType.OBSERVE),), "Observation intent.")
+                return CompileResult((Action(ActionType.OBSERVE),), "Observation intent.")
             if intent.kind == IntentKind.ZONE:
                 if intent.point is None:
                     raise ValueError("zone intent requires point")
@@ -53,7 +52,7 @@ class IntentCompiler:
             if intent.kind == IntentKind.CAMERA:
                 if intent.point is None:
                     raise ValueError("camera intent requires point")
-                return CompileResult((Action(__import__('cities_agent.actions', fromlist=['ActionType']).ActionType.CAMERA, self.mapper._pixel(intent.point), SafetyClass.REVERSIBLE, expected_effect="Move camera to calibrated point."),), "Compiled camera intent.")
+                return CompileResult((Action(ActionType.CAMERA, self.mapper._pixel(intent.point), SafetyClass.REVERSIBLE, expected_effect="Move camera to calibrated point."),), "Compiled camera intent.")
             raise ValueError(f"Unsupported intent kind: {intent.kind.value}")
         except (ValueError, KeyError) as exc:
             return CompileResult((), str(exc))
