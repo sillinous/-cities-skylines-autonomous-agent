@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from .control import Action
 from .perception import Observation
+from .state import CityState
 
 @dataclass
 class Plan:
@@ -8,5 +9,5 @@ class Plan:
     rationale: str
 
 class SafeStarterPlanner:
-    def plan(self, observation: Observation) -> Plan:
+    def plan(self, observation: Observation, state: CityState | None = None) -> Plan:
         return Plan([], "Observation-only mode; no game action requested.")
