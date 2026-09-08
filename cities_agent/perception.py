@@ -1,11 +1,18 @@
+from __future__ import annotations
+
 from dataclasses import dataclass, field
+
 import mss
 from PIL import Image, ImageOps
+
+from .ui_profile import CitiesSkylinesUiProfile
+
 
 @dataclass
 class UiRegion:
     name: str
     box: tuple[int, int, int, int]
+
 
 @dataclass
 class Observation:
@@ -14,28 +21,27 @@ class Observation:
     height: int
     ui_regions: dict[str, UiRegion] = field(default_factory=dict)
 
+
 class ScreenObserver:
-    DEFAULT_REGIONS = {
-        "top_bar": (0, 0, 1920, 90),
-        "bottom_bar": (0, 900, 1920, 1080),
-        "left_toolbar": (0, 0, 110, 1080),
-        "right_panel": (1600, 0, 1920, 1080),
-    }
+    def __init__(self, profile: CitiesSkylinesUiProfile | None = None):
+        self.profile = profile or CitiesSkylinesUiProfile()
+        self.profile.validate()
 
     def capture(self) -> Observation:
         with mss.mss() as sct:
             monitor = sct.monitors[1]
             raw = sct.grab(monitor)
             image = Image.frombytes("RGB", raw.size, raw.rgb)
-        regions = {n: UiRegion(n, self._scale_box(b, image.width, image.height))
-                   for n, b in self.DEFAULT_REGIONS.items()}
+        regions = {
+            name: UiRegion(name, self._scale_box(spec.box, image.width, image.height))
+            for name, spec in self.profile.regions.items()
+        }
         return Observation(image, image.width, image.height, regions)
 
     @staticmethod
     def _scale_box(box, width, height):
-        sx, sy = width / 1920, height / 1080
         x1, y1, x2, y2 = box
-        return (int(x1*sx), int(y1*sy), int(x2*sx), int(y2*sy))
+        return (round(x1 * width), round(y1 * height), round(x2 * width), round(y2 * height))
 
     def crop(self, observation: Observation, region: str) -> Image.Image:
         return observation.screenshot.crop(observation.ui_regions[region].box)
