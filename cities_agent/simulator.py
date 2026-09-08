@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, replace
 from typing import Iterable
 
-from .actions import Action
+from .actions import Action, ActionType
 from .state import CityState
 
 
@@ -52,11 +52,7 @@ class MockCity:
     def apply(self, action: Action) -> bool:
         accepted = True
         reason = "accepted"
-        if action.name == "wait":
-            pass
-        elif action.name == "budget" and action.args:
-            self.state.money = (self.state.money or 0) + int(action.args[0])
-        elif action.name == "zone" and action.args:
+        if action.type == ActionType.ZONE and action.args:
             zone = str(action.args[0]).lower()
             if zone == "residential":
                 self.state.residential_demand = max(0, (self.state.residential_demand or 0) - 10)
@@ -68,16 +64,12 @@ class MockCity:
             else:
                 accepted, reason = False, "unknown zone"
         else:
-            # The mock intentionally rejects unimplemented game actions rather than
-            # pretending that a real construction occurred.
             accepted, reason = False, "action not implemented by mock"
         self.events.append(SimEvent(self.tick, action.name, accepted, reason))
         return accepted
 
     def _simulate_time(self) -> None:
-        income = self.state.weekly_income or 0
-        self.state.money = (self.state.money or 0) + income
-        # Demand slowly returns as the simulated city grows.
+        self.state.money = (self.state.money or 0) + (self.state.weekly_income or 0)
         if self.state.population is not None:
             self.state.residential_demand = min(100, (self.state.residential_demand or 0) + 1)
             self.state.traffic_percent = max(0.0, min(100.0, 100.0 - self.state.population / 20.0))
