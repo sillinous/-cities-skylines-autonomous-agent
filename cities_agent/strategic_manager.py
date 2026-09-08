@@ -67,8 +67,11 @@ class StrategicManager:
     def goals_for(self, state: CityState) -> list[Goal]:
         diagnosis = self.diagnose(state)
         goals = []
-        if any(p in diagnosis.problems for p in ("power", "water", "sewage", "warnings")):
-            goals.append(Goal(GoalType.AVOID_FAILURE, priority=100, hard=True, description="Resolve uncertainty or failures first."))
+        if "warnings" in diagnosis.problems:
+            goals.append(Goal(GoalType.AVOID_FAILURE, priority=100, hard=True, description="Resolve uncertainty before changing the city."))
+        for utility in ("power", "water", "sewage"):
+            if utility in diagnosis.problems:
+                goals.append(Goal(GoalType.FIX_UTILITY, target=utility, priority=98, description=f"Restore {utility} service."))
         if state.money is not None and state.money < 5_000:
             goals.append(Goal(GoalType.MAINTAIN_BUDGET, priority=95, hard=True, description="Preserve a positive cash buffer."))
         if state.traffic_percent is not None and state.traffic_percent < 30:
@@ -83,6 +86,9 @@ class StrategicManager:
 
     def candidates(self, state: CityState) -> list[Action]:
         actions = []
+        for utility, healthy in (("power", state.power_ok), ("water", state.water_ok), ("sewage", state.sewage_ok)):
+            if healthy is False:
+                actions.append(Action(ActionType.UTILITY, (utility,), SafetyClass.REVERSIBLE, expected_effect=f"Restore {utility} service."))
         if state.residential_demand is not None and state.residential_demand >= 40:
             actions.append(Action(ActionType.ZONE, ("residential",), SafetyClass.REVERSIBLE, expected_effect="Reduce residential demand and increase population."))
         if state.commercial_demand is not None and state.commercial_demand >= 60:
@@ -91,13 +97,11 @@ class StrategicManager:
             actions.append(Action(ActionType.ZONE, ("industrial",), SafetyClass.REVERSIBLE, expected_effect="Reduce industrial demand."))
         if state.traffic_percent is not None and state.traffic_percent < 30 and (state.money or 0) >= 2_000:
             actions.append(Action(ActionType.BUILD_ROAD, (), SafetyClass.REVERSIBLE, expected_effect="Improve modeled traffic."))
-        for utility, healthy in (("power", state.power_ok), ("water", state.water_ok), ("sewage", state.sewage_ok)):
-            if healthy is False:
-                actions.append(Action(ActionType.UTILITY, (utility,), SafetyClass.REVERSIBLE, expected_effect=f"Restore {utility} service."))
         return actions
 
     def evaluate(self, state: CityState, action: Action, simulator: MockCity | None = None) -> Candidate:
-        city = simulator or MockCity()
+        city = simulator.clone() if simulator else MockCity()
+        city.set_state(state)
         evaluation = self.evaluator.evaluate(city, action)
         return Candidate(action, evaluation.score, evaluation.reason, evaluation)
 
