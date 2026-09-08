@@ -2,13 +2,13 @@
 
 Experimental Windows agent for observing and eventually operating Cities: Skylines through screen capture and mouse/keyboard control.
 
-## Phase 4 — architecture foundation
+## Phase 5 — closed-loop strategy foundation
 
 The project now has a game-version-neutral control architecture:
 
-`screen -> perception -> normalized state -> goals -> strategy -> typed actions -> safety policy -> controller -> verification/recovery -> audit`
+`screen -> perception -> normalized state -> diagnosis/goals -> candidate actions -> simulation/evaluation -> safety policy -> controller -> verification/recovery -> audit`
 
-The normalized state and action layers are intentionally independent of exact UI coordinates, so Cities: Skylines and Cities: Skylines II can later use separate adapters without rewriting the strategic core.
+The normalized state and action layers are independent of exact UI coordinates, so Cities: Skylines and Cities: Skylines II can later use separate adapters without rewriting the strategic core.
 
 ### Current capabilities
 
@@ -17,14 +17,18 @@ The normalized state and action layers are intentionally independent of exact UI
 - Typed action model with read-only/reversible/destructive safety classes
 - Explicit safety policy; autonomous input remains disabled by default
 - Goal and hard/soft constraint model
-- Deterministic baseline strategy that refuses to guess when evidence is insufficient
+- Deterministic `StrategicManager` that diagnoses state and ranks objectives
+- Candidate generation and isolated `MockCity` simulation/evaluation
+- Hard safety conditions force observation-only behavior
 - Recovery state machine for verification failures
 - In-memory audit event history
-- Unit tests for state, OCR, planner, safety, goals, and recovery
+- Unit tests for state, OCR, planner, safety, goals/recovery, simulation and strategy
 
 ### Safety contract
 
-The controller will not send non-read-only input unless the corresponding safety policy is explicitly enabled. Destructive actions require a separate explicit permission. This is deliberate: reliable perception and verification must exist before autonomous city-changing behavior is enabled.
+The controller will not send non-read-only input unless the corresponding safety policy is explicitly enabled. Destructive actions require separate explicit permission. The strategic manager also refuses to act when a hard safety condition is active or when no candidate has positive simulated value.
+
+This is deliberate: reliable perception, simulation, execution gating and verification must exist before autonomous city-changing behavior is enabled.
 
 ## Windows setup
 
@@ -45,9 +49,10 @@ Tesseract OCR must also be installed on Windows for OCR. Put it on PATH; explici
 1. Game-specific UI adapters for Cities: Skylines / Cities: Skylines II
 2. Reliable OCR and visual detection with confidence scoring
 3. Camera/navigation abstraction
-4. Mock simulator for planning tests without the game
+4. Expand the mock simulator with roads, utilities and services
 5. Verified construction, zoning, utilities and services
-6. Closed-loop strategic city manager
-7. Optional LLM planner behind deterministic safety gates
-8. Replay/evaluation harness
+6. Multi-step planning and replanning
+7. Optional LLM/vision planner behind deterministic safety gates
+8. Replay/evaluation harness and strategy benchmarking
 9. Long-running telemetry, checkpoints and save-game recovery
+10. Real-game pilot mode with autonomous input still gated behind explicit policy
