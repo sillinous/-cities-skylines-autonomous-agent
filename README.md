@@ -2,11 +2,11 @@
 
 Experimental Windows agent for observing and eventually operating Cities: Skylines through screen capture and mouse/keyboard control.
 
-## Phase 16 — Windows integration bridge
+## Phase 17 — bounded live agent loop
 
-The project now has the first platform bridge needed for a controlled live-game pilot:
+The project now has a concrete live-loop boundary:
 
-`screen -> perception/OCR/vision -> normalized state + semantic intents -> deterministic validation -> simulation/strategy -> safety policy -> pilot preflight -> calibrated semantic compiler -> Windows game-window checks -> calibrated controller -> observe -> semantic verify -> recover/replan -> replay/evaluate/benchmark -> telemetry/checkpoint`
+`screen -> state reader -> semantic intent -> calibrated compiler -> pilot preflight -> controller -> semantic verification -> telemetry/checkpoint`
 
 ### Current capabilities
 
@@ -36,6 +36,8 @@ The project now has the first platform bridge needed for a controlled live-game 
 - Per-cycle pilot action budget and hard halt state
 - Windows game-window adapter for case-insensitive Cities: Skylines title detection, foreground validation and window resolution discovery
 - Resolution-bound calibration profiles that reject mismatched observations
+- `LivePilot` loop that connects observation, semantic intent, calibrated compilation, pilot gates, controller dispatch, verification, telemetry and logical checkpoints
+- Live-loop tests covering the default dry-run boundary and successful high-confidence semantic verification
 
 ### Safety contract
 
@@ -44,6 +46,8 @@ The controller will not send non-read-only input unless the corresponding safety
 The pilot layer adds independent preflight gates: the game must be detected, be the foreground application, have resolution-matched calibration, and normally be paused before input. Dry-run mode is the default and intentionally blocks real input.
 
 A successful OS-level mouse/keyboard dispatch is not considered a successful game action. Semantic state deltas are preferred. Generic screen changes are low-confidence evidence and cannot satisfy the default verification threshold.
+
+The live loop halts on dispatch failure or insufficient verification confidence rather than continuing blindly. Per-cycle input is bounded. Telemetry and checkpoints record the decision boundary without granting additional execution authority.
 
 If perception is uncertain, the agent observes or recovers rather than guessing. Calibration is explicit; UI coordinates are never inferred from a model and blindly executed.
 
@@ -77,4 +81,6 @@ Tesseract OCR must also be installed on Windows for OCR.
 10. ~~Controlled real-game pilot infrastructure~~ **Implemented**
 11. Real save-game integration only after a separate backup/restore safety boundary is designed and tested
 12. ~~Calibrated semantic-to-input compiler~~ **Implemented**
-13. Real-game state verification and live agent-loop integration
+13. ~~Bounded live agent-loop integration~~ **Implemented**
+14. Real-game state verification with calibrated OCR/UI profiles
+15. Real-game action mapping for every supported semantic action, including utility placement and budget controls
