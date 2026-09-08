@@ -35,7 +35,7 @@ class MockCity:
         self.tick = 0
         self.state = CityState(
             money=self.config.starting_money,
-            population=100,
+            population=self.config.starting_population,
             weekly_income=self.config.starting_income,
             residential_demand=50,
             commercial_demand=25,
@@ -50,12 +50,26 @@ class MockCity:
     def clone(self) -> "MockCity":
         return deepcopy(self)
 
+    def set_state(self, state: CityState) -> None:
+        self.state = replace(state, service_coverage=dict(state.service_coverage), confidence=dict(state.confidence))
+
     def step(self, actions: Iterable[Action] = ()) -> CityState:
         for action in actions:
             self.apply(action)
         self.tick += 1
         self._simulate_time()
-        return replace(self.state)
+        return self._snapshot()
+
+    def wait(self, ticks: int = 1) -> CityState:
+        if ticks < 0:
+            raise ValueError("ticks must be non-negative")
+        for _ in range(ticks):
+            self.tick += 1
+            self._simulate_time()
+        return self._snapshot()
+
+    def _snapshot(self) -> CityState:
+        return replace(self.state, service_coverage=dict(self.state.service_coverage), confidence=dict(self.state.confidence))
 
     def apply(self, action: Action) -> bool:
         accepted = True
