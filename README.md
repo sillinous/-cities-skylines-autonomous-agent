@@ -2,11 +2,11 @@
 
 Experimental Windows agent for observing and eventually operating Cities: Skylines through screen capture and mouse/keyboard control.
 
-## Phase 15 — controlled real-game pilot infrastructure
+## Phase 16 — Windows integration bridge
 
-The project now adds a hard pilot boundary around the existing planner/controller path:
+The project now has the first platform bridge needed for a controlled live-game pilot:
 
-`screen -> perception/OCR/vision -> normalized state + semantic intents -> deterministic validation -> simulation/strategy -> safety policy -> pilot preflight -> calibrated controller -> observe -> semantic verify -> recover/replan -> replay/evaluate/benchmark -> telemetry/checkpoint`
+`screen -> perception/OCR/vision -> normalized state + semantic intents -> deterministic validation -> simulation/strategy -> safety policy -> pilot preflight -> calibrated semantic compiler -> Windows game-window checks -> calibrated controller -> observe -> semantic verify -> recover/replan -> replay/evaluate/benchmark -> telemetry/checkpoint`
 
 ### Current capabilities
 
@@ -16,6 +16,7 @@ The project now adds a hard pilot boundary around the existing planner/controlle
 - Semantic `Intent` model for observation, construction, zoning, utilities, services, bulldozing and budgets
 - Confidence validation before an intent can reach execution
 - Deterministic `VisionIntentPlanner` that converts intents into typed actions
+- `IntentCompiler` translating validated semantic intents into calibrated low-level actions without dispatching OS input
 - Safety policy remains the final authorization boundary; the vision layer cannot dispatch input
 - Explicit read-only/reversible/destructive safety classes
 - Deterministic strategic manager and bounded multi-step planner
@@ -33,6 +34,8 @@ The project now adds a hard pilot boundary around the existing planner/controlle
 - Controlled real-game pilot guard with game-detection, foreground, calibration and pause preflight gates
 - Dry-run controller that records intended actions without dispatching mouse/keyboard input
 - Per-cycle pilot action budget and hard halt state
+- Windows game-window adapter for case-insensitive Cities: Skylines title detection, foreground validation and window resolution discovery
+- Resolution-bound calibration profiles that reject mismatched observations
 
 ### Safety contract
 
@@ -73,4 +76,5 @@ Tesseract OCR must also be installed on Windows for OCR.
 9. ~~Long-running telemetry and restart-safe checkpoints~~ **Implemented**
 10. ~~Controlled real-game pilot infrastructure~~ **Implemented**
 11. Real save-game integration only after a separate backup/restore safety boundary is designed and tested
-12. Calibrated semantic-to-input compiler and real-game state verification
+12. ~~Calibrated semantic-to-input compiler~~ **Implemented**
+13. Real-game state verification and live agent-loop integration
