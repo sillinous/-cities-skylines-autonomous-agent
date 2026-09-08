@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .actions import Action
+from .actions import Action, ActionType
 from .perception import Observation
 from .state import CityState
 
@@ -15,7 +15,7 @@ class VerificationResult:
 
 
 class ActionVerifier:
-    """Verify game effects rather than trusting successful input dispatch."""
+    """Verify game effects using typed state deltas before weak visual evidence."""
 
     def verify(
         self,
@@ -36,32 +36,45 @@ class ActionVerifier:
             if result is not None:
                 return result
         if self._image_changed(before, after):
-            return VerificationResult(True, "Screen changed after input; effect requires semantic confirmation.", 0.55)
+            return VerificationResult(True, "Screen changed, but no semantic state delta was available.", 0.55)
         return VerificationResult(False, "No observable state or screen change detected.", 0.20)
 
     @staticmethod
     def _verify_state_delta(before: CityState, after: CityState, action: Action | None):
         if action is None:
             return None
-        if action.type.value == "zone" and action.args:
+        if action.type == ActionType.ZONE and action.args:
             zone = str(action.args[0]).lower()
             field = f"{zone}_demand"
-            if hasattr(before, field) and getattr(before, field) is not None and getattr(after, field) is not None:
-                if getattr(after, field) < getattr(before, field):
-                    return VerificationResult(True, f"{zone} demand decreased as expected.", 0.90)
-        if action.type.value == "build_road" and before.traffic_percent is not None and after.traffic_percent is not None:
-            if after.traffic_percent > before.traffic_percent:
+            b, a = getattr(before, field, None), getattr(after, field, None)
+            if b is not None and a is not None and a < b:
+                return VerificationResult(True, f"{zone} demand decreased as expected.", 0.90)
+        if action.type == ActionType.BUILD_ROAD:
+            b, a = before.traffic_percent, after.traffic_percent
+            if b is not None and a is not None and a > b:
                 return VerificationResult(True, "Traffic metric improved after road action.", 0.85)
-        if action.type.value == "utility" and action.args:
+        if action.type == ActionType.UTILITY and action.args:
             utility = str(action.args[0]).lower()
             field = {"power": "power_ok", "water": "water_ok", "sewage": "sewage_ok"}.get(utility)
             if field and getattr(after, field) is True and getattr(before, field) is not True:
                 return VerificationResult(True, f"{utility} status recovered.", 0.90)
+        if action.type == ActionType.SERVICE and action.args:
+            service = str(action.args[0]).lower()
+            b = before.service_coverage.get(service)
+            a = after.service_coverage.get(service)
+            if b is not None and a is not None and a > b:
+                return VerificationResult(True, f"{service} coverage increased.", 0.90)
+        if action.type == ActionType.BUDGET and len(action.args) == 2:
+            category, value = str(action.args[0]).lower(), int(action.args[1])
+            if after.budgets.get(category) == value and before.budgets.get(category) != value:
+                return VerificationResult(True, f"{category} budget changed to {value}%.", 0.95)
+        if action.type == ActionType.BULLDOZE and before.money is not None and after.money is not None:
+            if after.money > before.money:
+                return VerificationResult(True, "Bulldoze produced the modeled refund.", 0.85)
         return None
 
     @staticmethod
     def _image_changed(before: Observation, after: Observation, threshold: float = 0.01) -> bool:
-        # Downsample before comparison to make verification cheap and robust to tiny UI noise.
         a = before.screenshot.resize((64, 36)).convert("L")
         b = after.screenshot.resize((64, 36)).convert("L")
         pixels_a, pixels_b = list(a.getdata()), list(b.getdata())
