@@ -14,12 +14,16 @@ class BuildSpec:
     road_type: str = "road"
 
 
-class CitiesSkylinesActionMapper:
-    """Map semantic intents to calibrated low-level input actions.
+@dataclass(frozen=True)
+class PlacementSpec:
+    """Calibrated placement for a tool that requires a world target."""
+    tool_anchor: str
+    point: tuple[float, float]
+    safety: SafetyClass = SafetyClass.REVERSIBLE
 
-    Required tool anchors are deliberately supplied by calibration rather than
-    guessed here. This keeps the mapper portable across UI scale/resolution.
-    """
+
+class CitiesSkylinesActionMapper:
+    """Map semantic intents to calibrated low-level input actions."""
 
     def __init__(self, calibration: Calibration):
         self.calibration = calibration
@@ -29,8 +33,7 @@ class CitiesSkylinesActionMapper:
         return Action(ActionType.CLICK, (x, y), safety, expected_effect=f"Click calibrated anchor '{anchor}'.")
 
     def select_tool(self, anchor: str) -> Action:
-        x, y = self.calibration.pixel(anchor)
-        return Action(ActionType.SELECT_TOOL, (x, y), SafetyClass.REVERSIBLE, expected_effect=f"Select tool at '{anchor}'.")
+        return self.click_anchor(anchor)
 
     def build_road(self, spec: BuildSpec) -> tuple[Action, ...]:
         self._validate_point(spec.start)
@@ -43,25 +46,31 @@ class CitiesSkylinesActionMapper:
         )
 
     def zone(self, zone_type: str, point: tuple[float, float]) -> tuple[Action, ...]:
-        self._validate_point(point)
-        normalized = zone_type.lower()
-        if normalized not in {"residential", "commercial", "industrial"}:
-            raise ValueError("zone_type must be residential, commercial, or industrial")
-        return (
-            self.select_tool(f"zone:{normalized}"),
-            Action(ActionType.CLICK, self._pixel(point), SafetyClass.REVERSIBLE, expected_effect=f"Apply {normalized} zoning."),
-        )
+        return self.place(PlacementSpec(f"zone:{self._zone(zone_type)}", point))
 
-    def utility(self, utility: str) -> tuple[Action, ...]:
-        utility = utility.lower()
+    def utility(self, utility: str, point: tuple[float, float] | None = None) -> tuple[Action, ...]:
+        utility = utility.lower().strip()
         if utility not in {"power", "water", "sewage"}:
             raise ValueError("utility must be power, water, or sewage")
-        return (self.select_tool(f"utility:{utility}"),)
+        if point is None:
+            raise ValueError("utility placement requires point")
+        return self.place(PlacementSpec(f"utility:{utility}", point))
 
-    def service(self, service: str) -> tuple[Action, ...]:
-        if not service.strip():
+    def service(self, service: str, point: tuple[float, float] | None = None) -> tuple[Action, ...]:
+        service = service.lower().strip()
+        if not service:
             raise ValueError("service must not be empty")
-        return (self.select_tool(f"service:{service.lower()}"),)
+        if point is None:
+            raise ValueError("service placement requires point")
+        return self.place(PlacementSpec(f"service:{service}", point))
+
+    def place(self, spec: PlacementSpec) -> tuple[Action, ...]:
+        self._validate_point(spec.point)
+        x, y = self._pixel(spec.point)
+        return (
+            self.select_tool(spec.tool_anchor),
+            Action(ActionType.CLICK, (x, y), spec.safety, expected_effect=f"Place {spec.tool_anchor} at calibrated world point."),
+        )
 
     def bulldoze(self, point: tuple[float, float]) -> tuple[Action, ...]:
         self._validate_point(point)
@@ -71,14 +80,21 @@ class CitiesSkylinesActionMapper:
         )
 
     def budget(self, category: str, percentage: int) -> tuple[Action, ...]:
+        if not category.strip():
+            raise ValueError("budget category must not be empty")
         if not 0 <= percentage <= 150:
             raise ValueError("budget percentage must be between 0 and 150")
-        # The exact budget slider interaction is UI-profile-specific. Returning
-        # a semantic action lets a concrete controller implement the calibrated UI.
-        return (Action(ActionType.BUDGET, (category.lower(), percentage), SafetyClass.REVERSIBLE, expected_effect=f"Set {category} budget to {percentage}%."),)
+        return (Action(ActionType.BUDGET, (category.lower().strip(), percentage), SafetyClass.REVERSIBLE, expected_effect=f"Set {category} budget to {percentage}% ."),)
 
     def _pixel(self, point: tuple[float, float]) -> tuple[int, int]:
         return round(point[0] * self.calibration.width), round(point[1] * self.calibration.height)
+
+    @staticmethod
+    def _zone(zone_type: str) -> str:
+        normalized = zone_type.lower().strip()
+        if normalized not in {"residential", "commercial", "industrial"}:
+            raise ValueError("zone_type must be residential, commercial, or industrial")
+        return normalized
 
     @staticmethod
     def _validate_point(point: tuple[float, float]) -> None:
