@@ -17,6 +17,7 @@ class SimConfig:
     utility_cost: int = 5_000
     service_cost: int = 8_000
     zone_cost: int = 500
+    bulldoze_refund: int = 250
 
 
 @dataclass
@@ -44,6 +45,7 @@ class MockCity:
             power_ok=True,
             water_ok=True,
             sewage_ok=True,
+            budgets={"electricity": 100, "water": 100, "healthcare": 100, "police": 100, "fire": 100},
         )
         self.events: list[SimEvent] = []
 
@@ -51,7 +53,12 @@ class MockCity:
         return deepcopy(self)
 
     def set_state(self, state: CityState) -> None:
-        self.state = replace(state, service_coverage=dict(state.service_coverage), confidence=dict(state.confidence))
+        self.state = replace(
+            state,
+            service_coverage=dict(state.service_coverage),
+            budgets=dict(state.budgets),
+            confidence=dict(state.confidence),
+        )
 
     def step(self, actions: Iterable[Action] = ()) -> CityState:
         for action in actions:
@@ -69,7 +76,7 @@ class MockCity:
         return self._snapshot()
 
     def _snapshot(self) -> CityState:
-        return replace(self.state, service_coverage=dict(self.state.service_coverage), confidence=dict(self.state.confidence))
+        return replace(self.state, service_coverage=dict(self.state.service_coverage), budgets=dict(self.state.budgets), confidence=dict(self.state.confidence))
 
     def apply(self, action: Action) -> bool:
         accepted = True
@@ -98,28 +105,42 @@ class MockCity:
                 self.state.traffic_percent = min(100.0, (self.state.traffic_percent or 0.0) + 8.0)
         elif action.type == ActionType.UTILITY:
             utility = str(action.args[0]).lower() if action.args else ""
-            cost = self.config.utility_cost
-            if not self._can_afford(cost):
-                accepted, reason = False, "insufficient funds"
-            elif utility == "power":
-                self.state.power_ok = True
-            elif utility == "water":
-                self.state.water_ok = True
-            elif utility == "sewage":
-                self.state.sewage_ok = True
-            else:
+            if utility not in {"power", "water", "sewage"}:
                 accepted, reason = False, "unknown utility"
+            elif getattr(self.state, f"{utility}_ok") is True:
+                accepted, reason = False, f"{utility} is already healthy"
+            elif not self._can_afford(self.config.utility_cost):
+                accepted, reason = False, "insufficient funds"
+            else:
+                cost = self.config.utility_cost
+                setattr(self.state, f"{utility}_ok", True)
         elif action.type == ActionType.SERVICE:
             service = str(action.args[0]).lower() if action.args else ""
-            cost = self.config.service_cost
-            if not self._can_afford(cost):
+            if not service:
+                accepted, reason = False, "unknown service"
+            elif not self._can_afford(self.config.service_cost):
                 accepted, reason = False, "insufficient funds"
-            elif service:
+            else:
+                cost = self.config.service_cost
                 coverage = dict(self.state.service_coverage)
                 coverage[service] = min(100.0, coverage.get(service, 0.0) + 25.0)
                 self.state.service_coverage = coverage
+        elif action.type == ActionType.BULLDOZE:
+            if not action.args:
+                accepted, reason = False, "bulldoze requires a target"
             else:
-                accepted, reason = False, "unknown service"
+                self.state.money = (self.state.money or 0) + self.config.bulldoze_refund
+        elif action.type == ActionType.BUDGET:
+            if len(action.args) != 2:
+                accepted, reason = False, "budget requires category and percentage"
+            else:
+                category, value = str(action.args[0]).lower(), int(action.args[1])
+                if not 0 <= value <= 150:
+                    accepted, reason = False, "budget must be between 0 and 150"
+                else:
+                    budgets = dict(self.state.budgets)
+                    budgets[category] = value
+                    self.state.budgets = budgets
         else:
             accepted, reason = False, "action not implemented by mock"
 
