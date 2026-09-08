@@ -40,16 +40,17 @@ class CitiesSkylinesActionMapper:
         x2, y2 = self._pixel(spec.end)
         return (
             Action(ActionType.SELECT_TOOL, (spec.road_type,), SafetyClass.REVERSIBLE, expected_effect=f"Select {spec.road_type} road tool."),
-            Action(ActionType.DRAG, (x1, y1, x2, y2), SafetyClass.REVERSIBLE, expected_effect="Draw the requested road segment.", requires_verification if False else False),
+            Action(ActionType.DRAG, (x1, y1, x2, y2), SafetyClass.REVERSIBLE, expected_effect="Draw the requested road segment."),
         )
 
     def zone(self, zone_type: str, point: tuple[float, float]) -> tuple[Action, ...]:
         self._validate_point(point)
-        if zone_type.lower() not in {"residential", "commercial", "industrial"}:
+        normalized = zone_type.lower()
+        if normalized not in {"residential", "commercial", "industrial"}:
             raise ValueError("zone_type must be residential, commercial, or industrial")
         return (
-            Action(ActionType.SELECT_TOOL, (f"zone:{zone_type.lower()}",), SafetyClass.REVERSIBLE, expected_effect=f"Select {zone_type} zoning tool."),
-            Action(ActionType.CLICK, self._pixel(point), SafetyClass.REVERSIBLE, expected_effect=f"Zone {zone_type} at the requested location."),
+            Action(ActionType.SELECT_TOOL, (f"zone:{normalized}",), SafetyClass.REVERSIBLE, expected_effect=f"Select {normalized} zoning tool."),
+            Action(ActionType.CLICK, self._pixel(point), SafetyClass.REVERSIBLE, expected_effect=f"Zone {normalized} at the requested location."),
         )
 
     def _pixel(self, point: tuple[float, float]) -> tuple[int, int]:
