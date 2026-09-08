@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Iterable
 
 from .actions import Action
 from .perception import Observation
@@ -16,6 +17,7 @@ class PlanStep:
     expected_state: CityState
     rationale: str
     max_retries: int = 0
+    requires_verification: bool = True
 
 
 @dataclass
@@ -41,23 +43,25 @@ class MultiStepPlanner:
         city.set_state(state)
         goals = self.manager.goals_for(state)
         if goals and goals[0].hard:
+            self.manager.audit.record("plan_blocked", "Hard safety condition requires observation before planning.")
             return Plan([], "Hard safety condition requires observation and recovery before planning.", valid=False)
 
-        best: tuple[float, tuple[Action, ...]] | None = None
+        best = None
         frontier: list[tuple[tuple[Action, ...], MockCity]] = [((), city)]
         for _depth in range(1, self.max_depth + 1):
             next_frontier: list[tuple[tuple[Action, ...], MockCity]] = []
             for actions, node in frontier:
-                for action in self._authorized_candidates(node.state)[: self.branch_limit]:
+                candidates = self._authorized_candidates(node.state)
+                for action in candidates[: self.branch_limit]:
                     child = node.clone()
-                    before = child.state
                     after = child.step([action])
                     if not child.events[-1].accepted:
                         continue
                     sequence = actions + (action,)
-                    value = self.manager.evaluator.score(state, after)
-                    value += 0.25 * self.manager.evaluator.score(before, after)
-                    value -= 0.5 * len(sequence)
+                    evaluation = self.manager.evaluator.evaluate_sequence(city, sequence)
+                    if not evaluation.accepted:
+                        continue
+                    value = evaluation.score
                     if best is None or value > best[0]:
                         best = (value, sequence)
                     next_frontier.append((sequence, child))
@@ -66,6 +70,7 @@ class MultiStepPlanner:
                 break
 
         if best is None or best[0] <= 0:
+            self.manager.audit.record("plan_rejected", "No safe positive-value sequence was found.")
             return Plan([], "No safe positive-value sequence was found by bounded simulation.", valid=False)
 
         score, actions = best
@@ -83,7 +88,9 @@ class MultiStepPlanner:
         for name in ("money", "population", "residential_demand", "commercial_demand", "industrial_demand"):
             expected = getattr(step.expected_state, name)
             actual = getattr(observed_state, name)
-            if expected is not None and actual is not None and abs(actual - expected) > tolerance:
+            if expected is None or actual is None:
+                continue
+            if abs(actual - expected) > tolerance:
                 self.manager.audit.record("plan_invalidated", f"Step {step.index} diverged on {name}.", expected=expected, actual=actual)
                 return False
         for name in ("power_ok", "water_ok", "sewage_ok"):
@@ -104,13 +111,13 @@ class MultiStepPlanner:
                 self.manager.audit.record("candidate_blocked", reason, action=action.name)
         return result
 
-    def _make_steps(self, state: CityState, actions: tuple[Action, ...], simulator: MockCity | None) -> list[PlanStep]:
+    def _make_steps(self, state: CityState, actions: Iterable[Action], simulator: MockCity | None) -> list[PlanStep]:
         city = simulator.clone() if simulator else MockCity()
         city.set_state(state)
         steps = []
         for index, action in enumerate(actions):
             expected = city.step([action])
-            steps.append(PlanStep(index, action, expected, action.expected_effect, action.max_retries))
+            steps.append(PlanStep(index, action, expected, action.expected_effect, action.max_retries, True))
         return steps
 
 
