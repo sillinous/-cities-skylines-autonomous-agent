@@ -1,14 +1,11 @@
-from dataclasses import dataclass
 import pyautogui
+from .actions import Action, ActionType
+from .policy import SafetyPolicy
 
-@dataclass(frozen=True)
-class Action:
-    name: str
-    args: tuple = ()
 
 class SafetyController:
-    def __init__(self, enabled: bool = False):
-        self.enabled = enabled
+    def __init__(self, policy: SafetyPolicy | None = None):
+        self.policy = policy or SafetyPolicy()
         self.stopped = False
 
     def emergency_stop(self):
@@ -17,15 +14,26 @@ class SafetyController:
             pyautogui.keyUp(key)
 
     def execute(self, action: Action) -> bool:
-        if self.stopped or not self.enabled:
+        if self.stopped:
             return False
-        if action.name == "key":
+        authorized, _ = self.policy.authorize(action)
+        if not authorized:
+            return False
+        if action.type == ActionType.OBSERVE:
+            return True
+        if action.type == ActionType.KEY:
             pyautogui.press(*action.args)
             return True
-        if action.name == "move":
+        if action.type == ActionType.CAMERA:
             pyautogui.moveTo(*action.args, duration=0.15)
             return True
-        if action.name == "click":
+        if action.type == ActionType.CLICK:
             pyautogui.click(*action.args)
             return True
-        raise ValueError(f"Unsupported action: {action.name}")
+        if action.type == ActionType.DRAG:
+            if len(action.args) != 4:
+                raise ValueError("drag requires x1, y1, x2, y2")
+            pyautogui.moveTo(action.args[0], action.args[1], duration=0.1)
+            pyautogui.dragTo(action.args[2], action.args[3], duration=0.25)
+            return True
+        raise ValueError(f"Unsupported action: {action.type.value}")
