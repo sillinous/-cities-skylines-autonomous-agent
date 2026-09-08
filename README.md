@@ -2,39 +2,35 @@
 
 Experimental Windows agent for observing and eventually operating Cities: Skylines through screen capture and mouse/keyboard control.
 
-## Phase 11 — semantic construction layer
+## Phase 12 — vision intent and deterministic safety gates
 
-The execution stack now distinguishes **semantic construction intent** from the calibrated mouse/keyboard events needed to perform it:
+The project now has an explicit boundary between visual/model interpretation and game control:
 
-`screen -> perception -> normalized state -> diagnosis/goals -> simulation -> semantic construction -> calibrated mapping -> safety policy -> controller -> observe -> semantic verify -> recover/replan`
+`screen -> perception/OCR/vision -> normalized state + semantic intents -> deterministic validation -> simulation/strategy -> safety policy -> calibrated controller -> observe -> semantic verify -> recover/replan`
 
 ### Current capabilities
 
 - Screen capture with normalized UI regions
 - Structured, confidence-aware `CityState`, including service coverage and budget telemetry
-- Typed action model with read-only/reversible/destructive safety classes
-- Explicit safety policy; autonomous input remains disabled by default
-- Goal and hard/soft constraint model
-- Deterministic `StrategicManager` and bounded multi-step planner
+- Injectable vision backend with a safe no-op default
+- Semantic `Intent` model for observation, construction, zoning, utilities, services, bulldozing and budgets
+- Confidence validation before an intent can reach execution
+- Deterministic `VisionIntentPlanner` that converts intents into typed actions
+- Safety policy remains the final authorization boundary; the vision layer cannot dispatch input
+- Explicit read-only/reversible/destructive safety classes
+- Deterministic strategic manager and bounded multi-step planner
 - Isolated `MockCity` simulation/evaluation with deterministic time progression
-- Simulator modeling for roads, zoning, utilities, services, budgets and bulldozing
-- Semantic `ConstructionActions` for road, zoning, utility, service, bulldoze and budget intent
-- Calibration-driven mapping of semantic construction into low-level tool selection, clicks and drags
-- Transactional `PlanExecutor`: dispatch -> observe -> verify -> continue
-- Verification based on meaningful state deltas for supported construction effects
-- Safe retries and automatic emergency stop on execution/verification failure
-- Divergence callback for recovery/replanning integration
-- Game sensor/controller adapter protocols
-- Recovery state machine and audit history
-- GitHub Actions CI for Python 3.11 and 3.12
+- Semantic construction and calibrated action mapping
+- Transactional plan executor with verification, retries and emergency stop
+- Recovery state machine, audit history and GitHub Actions CI
 
 ### Safety contract
 
-The controller will not send non-read-only input unless the corresponding safety policy is explicitly enabled. Destructive actions require separate explicit permission. A multi-step plan is only an expectation, never permission to blindly continue: every step must be observed and verified before the next step is allowed.
+The controller will not send non-read-only input unless the corresponding safety policy is explicitly enabled. Destructive actions require separate explicit permission. Model-generated or vision-generated intents are **never** trusted as execution authority.
 
-A successful OS-level mouse/keyboard dispatch is **not** considered a successful game action. Semantic state deltas are preferred. Generic screen changes are treated as low-confidence evidence and cannot satisfy the default 0.80 verification threshold.
+A successful OS-level mouse/keyboard dispatch is not considered a successful game action. Semantic state deltas are preferred. Generic screen changes are low-confidence evidence and cannot satisfy the default verification threshold.
 
-The adapter layer does not guess UI coordinates. Calibration must be explicit, and uncertain perception should leave the strategic layer in observation/recovery mode.
+If perception is uncertain, the agent observes or recovers rather than guessing. Calibration is explicit; UI coordinates are never inferred from a model and blindly executed.
 
 ## Windows setup
 
@@ -58,7 +54,7 @@ Tesseract OCR must also be installed on Windows for OCR.
 4. ~~Mock simulator foundation~~ **Implemented**
 5. ~~Semantic construction layer~~ **Implemented**
 6. ~~Multi-step planning and replanning~~ **Implemented**
-7. Optional LLM/vision planner behind deterministic safety gates **Next**
-8. Replay/evaluation harness and strategy benchmarking
+7. ~~Vision intent layer behind deterministic safety gates~~ **Implemented**
+8. Replay/evaluation harness and strategy benchmarking **Next**
 9. Long-running telemetry, checkpoints and save-game recovery
 10. Real-game pilot mode with autonomous input still gated behind explicit policy
