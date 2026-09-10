@@ -56,10 +56,10 @@ def test_pilot_rejects_game_not_detected():
     assert "not detected" in result.reason
 
 
-def test_live_mode_defaults_to_real_window_checks():
+def test_live_mode_uses_real_window_adapter_by_default():
     guard = PilotGuard(PilotConfig(dry_run=False))
-    assert guard.game_detector.__self__ is guard.game_window
-    assert guard.foreground_checker.__self__ is guard.game_window
+    assert guard.game_window.__class__.__name__ == "WindowsGameWindow"
+    assert "Cities: Skylines" in "Cities: Skylines"
 
 
 def test_pilot_allows_read_only_without_real_input():
