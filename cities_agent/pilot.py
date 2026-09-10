@@ -6,6 +6,7 @@ from typing import Callable
 from .actions import Action, ActionResult, SafetyClass
 from .calibration import Calibration, CalibrationError
 from .perception import Observation
+from .policy import SafetyPolicy
 from .windows import WindowsGameWindow
 
 
@@ -20,6 +21,7 @@ class PilotConfig:
     """Explicit gates for real-game input.
 
     Real input requires all gates to be true. Dry-run remains the default.
+    Safety permissions are independently explicit and default to denied.
     """
 
     dry_run: bool = True
@@ -27,6 +29,9 @@ class PilotConfig:
     require_foreground: bool = True
     require_calibration: bool = True
     require_paused: bool = True
+    allow_input: bool = False
+    allow_reversible: bool = False
+    allow_destructive: bool = False
 
 
 class PilotGuard:
@@ -44,9 +49,15 @@ class PilotGuard:
         game_detector: Callable[[Observation], bool] | None = None,
         foreground_checker: Callable[[], bool] | None = None,
         game_window: WindowsGameWindow | None = None,
+        safety_policy: SafetyPolicy | None = None,
     ):
         self.config = config or PilotConfig()
         self.game_window = game_window or WindowsGameWindow()
+        self.safety_policy = safety_policy or SafetyPolicy(
+            allow_input=self.config.allow_input,
+            allow_reversible=self.config.allow_reversible,
+            allow_destructive=self.config.allow_destructive,
+        )
         if game_detector is not None:
             self.game_detector = game_detector
         elif self.config.dry_run:
@@ -97,6 +108,9 @@ class PilotGuard:
     def authorize(self, action: Action, observation: Observation, *, state=None, max_actions: int = 1) -> PreflightResult:
         if action.safety == SafetyClass.READ_ONLY:
             return PreflightResult(True, "Read-only action does not require pilot input.")
+        policy_ok, policy_reason = self.safety_policy.authorize(action)
+        if not policy_ok:
+            return PreflightResult(False, policy_reason)
         result = self.preflight(observation, state=state, max_actions=max_actions)
         if not result.ready:
             return result
