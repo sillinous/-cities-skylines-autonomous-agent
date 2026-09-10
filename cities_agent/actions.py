@@ -33,6 +33,9 @@ class Action:
     preconditions: tuple[str, ...] = ()
     max_retries: int = 0
     timeout_seconds: float = 3.0
+    # Stable, serializable semantic facts supplied by the compiler.  This is
+    # intentionally last so existing positional construction remains valid.
+    metadata: tuple[tuple[str, str], ...] = ()
 
     @property
     def name(self) -> str:
@@ -41,6 +44,10 @@ class Action:
     @property
     def destructive(self) -> bool:
         return self.safety == SafetyClass.DESTRUCTIVE
+
+    def meta(self, key: str, default: str | None = None) -> str | None:
+        """Return one compiler-supplied semantic metadata value."""
+        return dict(self.metadata).get(key, default)
 
 
 @dataclass
