@@ -1,6 +1,7 @@
 from PIL import Image
 
 from cities_agent.actions import ActionResult
+from cities_agent.budget_control import BudgetControlProfile
 from cities_agent.calibration import Calibration
 from cities_agent.intent import Intent, IntentKind
 from cities_agent.live import LivePilot
@@ -59,7 +60,11 @@ def test_live_pilot_defaults_to_dry_run_gate():
 def test_live_pilot_verifies_dispatched_action():
     observer = FakeObserver()
     controller = FakeController()
-    guard = PilotGuard(PilotConfig(dry_run=False))
+    guard = PilotGuard(
+        PilotConfig(dry_run=False),
+        game_detector=lambda _observation: True,
+        foreground_checker=lambda: True,
+    )
     obs = observer.capture()
     guard.set_calibration(Calibration(1920, 1080, {"center": (0.5, 0.5)}), obs)
     pilot = LivePilot(
@@ -74,3 +79,47 @@ def test_live_pilot_verifies_dispatched_action():
     assert not result.halted
     assert len(controller.actions) == 1
     assert result.verification[0].success
+
+
+def test_live_pilot_preserves_unexecuted_compiled_actions():
+    observer = FakeObserver()
+    controller = FakeController()
+    guard = PilotGuard(
+        PilotConfig(dry_run=False),
+        game_detector=lambda _observation: True,
+        foreground_checker=lambda: True,
+    )
+    obs = observer.capture()
+    calibration = Calibration(
+        1920,
+        1080,
+        {
+            "budget": (0.9, 0.1),
+            "budget:electricity": (0.8, 0.2),
+            "budget:slider_start": (0.5, 0.2),
+            "budget:slider_end": (0.7, 0.2),
+        },
+    )
+    guard.set_calibration(calibration, obs)
+    pilot = LivePilot(
+        observer=observer,
+        state_reader=lambda _: CityState(simulation_paused=True),
+        intent_provider=lambda *_: Intent(IntentKind.BUDGET, target="electricity", value=75),
+        controller=controller,
+        pilot=guard,
+        verifier=FakeVerifier(),
+    )
+    from cities_agent.compiler import IntentCompiler
+    pilot.compiler = IntentCompiler(
+        calibration,
+        budget_profile=BudgetControlProfile(category_anchors={"electricity": "budget:electricity"}),
+    )
+
+    first = pilot.run_once(max_actions=1)
+    assert len(first.actions) == 1
+    assert len(pilot.pending_actions) == 2
+
+    second = pilot.run_once(max_actions=1)
+    assert len(second.actions) == 1
+    assert len(pilot.pending_actions) == 1
+    assert len(controller.actions) == 2
