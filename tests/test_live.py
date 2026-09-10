@@ -38,6 +38,10 @@ class FakeVerifier:
         return VerificationResult(True, "semantic state delta verified", 0.95)
 
 
+def live_config():
+    return PilotConfig(dry_run=False, allow_input=True, allow_reversible=True)
+
+
 def test_live_pilot_defaults_to_dry_run_gate():
     observer = FakeObserver()
     controller = FakeController()
@@ -61,7 +65,7 @@ def test_live_pilot_verifies_dispatched_action():
     observer = FakeObserver()
     controller = FakeController()
     guard = PilotGuard(
-        PilotConfig(dry_run=False),
+        live_config(),
         game_detector=lambda _observation: True,
         foreground_checker=lambda: True,
     )
@@ -85,7 +89,7 @@ def test_live_pilot_preserves_unexecuted_compiled_actions():
     observer = FakeObserver()
     controller = FakeController()
     guard = PilotGuard(
-        PilotConfig(dry_run=False),
+        live_config(),
         game_detector=lambda _observation: True,
         foreground_checker=lambda: True,
     )
@@ -123,3 +127,21 @@ def test_live_pilot_preserves_unexecuted_compiled_actions():
     assert len(second.actions) == 1
     assert len(pilot.pending_actions) == 1
     assert len(controller.actions) == 2
+
+
+def test_live_pilot_rejects_reversible_input_without_explicit_policy():
+    observer = FakeObserver()
+    guard = PilotGuard(
+        PilotConfig(dry_run=False),
+        game_detector=lambda _observation: True,
+        foreground_checker=lambda: True,
+    )
+    obs = observer.capture()
+    guard.set_calibration(Calibration(1920, 1080, {"center": (0.5, 0.5)}), obs)
+    result = guard.authorize(
+        __import__("cities_agent.actions", fromlist=["Action"]).Action(__import__("cities_agent.actions", fromlist=["ActionType"]).ActionType.CLICK, (10, 10), __import__("cities_agent.actions", fromlist=["SafetyClass"]).SafetyClass.REVERSIBLE),
+        obs,
+        state=CityState(simulation_paused=True),
+    )
+    assert not result.ready
+    assert "policy" in result.reason.lower()
