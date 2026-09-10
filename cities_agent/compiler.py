@@ -22,6 +22,12 @@ def _tag(actions: tuple[Action, ...], **metadata: str) -> tuple[Action, ...]:
     return tuple(replace(action, metadata=action.metadata + tags) for action in actions)
 
 
+def _effect_last(actions: tuple[Action, ...]) -> tuple[Action, ...]:
+    if not actions:
+        return actions
+    return actions[:-1] + (replace(actions[-1], metadata=actions[-1].metadata[:-1] + (("phase", "effect"),)),)
+
+
 class IntentCompiler:
     """Compile semantic intents into calibrated typed actions without dispatching."""
 
@@ -35,29 +41,20 @@ class IntentCompiler:
             if intent.kind == IntentKind.OBSERVE:
                 return CompileResult((Action(ActionType.OBSERVE),), "Observation intent.")
             if intent.kind == IntentKind.ZONE:
-                actions = self.mapper.zone(intent.target, intent.point)
-                return CompileResult(_tag(actions, semantic_kind="zone", target=intent.target, phase="tool"), "Compiled zoning intent.")
+                actions = _effect_last(_tag(self.mapper.zone(intent.target, intent.point), semantic_kind="zone", target=intent.target, phase="tool"))
+                return CompileResult(actions, "Compiled zoning intent.")
             if intent.kind == IntentKind.CONSTRUCT:
-                actions = self.mapper.build_road(BuildSpec(intent.point, intent.end, intent.target or "road"))
-                tagged = list(_tag(actions, semantic_kind="construct", target=intent.target or "road", phase="tool"))
-                if len(tagged) > 1:
-                    tagged[-1] = replace(tagged[-1], metadata=tagged[-1].metadata[:-1] + (("phase", "effect"),))
-                return CompileResult(tuple(tagged), "Compiled construction intent.")
+                actions = _effect_last(_tag(self.mapper.build_road(BuildSpec(intent.point, intent.end, intent.target or "road")), semantic_kind="construct", target=intent.target or "road", phase="tool"))
+                return CompileResult(actions, "Compiled construction intent.")
             if intent.kind == IntentKind.UTILITY:
-                actions = self.mapper.utility(intent.target, intent.point)
-                tagged = list(_tag(actions, semantic_kind="utility", target=intent.target, phase="tool"))
-                tagged[-1] = replace(tagged[-1], metadata=tagged[-1].metadata[:-1] + (("phase", "effect"),))
-                return CompileResult(tuple(tagged), "Compiled utility placement intent.")
+                actions = _effect_last(_tag(self.mapper.utility(intent.target, intent.point), semantic_kind="utility", target=intent.target, phase="tool"))
+                return CompileResult(actions, "Compiled utility placement intent.")
             if intent.kind == IntentKind.SERVICE:
-                actions = self.mapper.service(intent.target, intent.point)
-                tagged = list(_tag(actions, semantic_kind="service", target=intent.target, phase="tool"))
-                tagged[-1] = replace(tagged[-1], metadata=tagged[-1].metadata[:-1] + (("phase", "effect"),))
-                return CompileResult(tuple(tagged), "Compiled service placement intent.")
+                actions = _effect_last(_tag(self.mapper.service(intent.target, intent.point), semantic_kind="service", target=intent.target, phase="tool"))
+                return CompileResult(actions, "Compiled service placement intent.")
             if intent.kind == IntentKind.BULLDOZE:
-                actions = self.mapper.bulldoze(intent.point)
-                tagged = list(_tag(actions, semantic_kind="bulldoze", phase="tool"))
-                tagged[-1] = replace(tagged[-1], metadata=tagged[-1].metadata[:-1] + (("phase", "effect"),))
-                return CompileResult(tuple(tagged), "Compiled bulldoze intent.")
+                actions = _effect_last(_tag(self.mapper.bulldoze(intent.point), semantic_kind="bulldoze", phase="tool"))
+                return CompileResult(actions, "Compiled bulldoze intent.")
             if intent.kind == IntentKind.BUDGET:
                 actions = self.budget_controller.compile(intent.target, int(intent.value))
                 phases = ("panel", "category", "effect")
