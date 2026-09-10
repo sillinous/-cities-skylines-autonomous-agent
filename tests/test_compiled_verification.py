@@ -1,4 +1,7 @@
+from PIL import Image
+
 from cities_agent.actions import ActionType
+from cities_agent.budget_control import BudgetControlProfile
 from cities_agent.calibration import Calibration
 from cities_agent.compiler import IntentCompiler
 from cities_agent.intent import Intent, IntentKind
@@ -31,24 +34,21 @@ def test_zone_final_click_is_semantically_tagged():
 
 
 def test_zone_contract_rejects_unrelated_demand_change():
-    result = IntentCompiler(calibration()).compile(Intent(IntentKind.ZONE, target="residential", point=(0.6, 0.6)))
-    action = result.actions[-1]
+    action = IntentCompiler(calibration()).compile(Intent(IntentKind.ZONE, target="residential", point=(0.6, 0.6))).actions[-1]
     before = CityState(residential_demand=50, commercial_demand=20)
     after = CityState(residential_demand=50, commercial_demand=10)
     assert not ActionSpecificVerifier().verify(before, after, action).success
 
 
 def test_zone_contract_accepts_target_demand_change():
-    result = IntentCompiler(calibration()).compile(Intent(IntentKind.ZONE, target="residential", point=(0.6, 0.6)))
-    action = result.actions[-1]
+    action = IntentCompiler(calibration()).compile(Intent(IntentKind.ZONE, target="residential", point=(0.6, 0.6))).actions[-1]
     before = CityState(residential_demand=50, commercial_demand=20)
     after = CityState(residential_demand=40, commercial_demand=20)
     assert ActionSpecificVerifier().verify(before, after, action).success
 
 
 def test_service_final_click_requires_target_coverage_increase():
-    result = IntentCompiler(calibration()).compile(Intent(IntentKind.SERVICE, target="police", point=(0.6, 0.6)))
-    action = result.actions[-1]
+    action = IntentCompiler(calibration()).compile(Intent(IntentKind.SERVICE, target="police", point=(0.6, 0.6))).actions[-1]
     before = CityState(service_coverage={"police": 40.0})
     after = CityState(service_coverage={"police": 40.0, "fire": 90.0})
     assert not ActionSpecificVerifier().verify(before, after, action).success
@@ -57,8 +57,8 @@ def test_service_final_click_requires_target_coverage_increase():
 
 
 def test_budget_final_click_requires_exact_category_and_value():
-    result = IntentCompiler(calibration(), budget_profile=__import__("cities_agent.budget_control", fromlist=["BudgetControlProfile"]).BudgetControlProfile(category_anchors={"electricity": "budget:electricity"})).compile(Intent(IntentKind.BUDGET, target="electricity", value=125))
-    action = result.actions[-1]
+    profile = BudgetControlProfile(category_anchors={"electricity": "budget:electricity"})
+    action = IntentCompiler(calibration(), budget_profile=profile).compile(Intent(IntentKind.BUDGET, target="electricity", value=125)).actions[-1]
     assert action.type == ActionType.CLICK
     before = CityState(budgets={"electricity": 100})
     after = CityState(budgets={"electricity": 125})
@@ -68,10 +68,10 @@ def test_budget_final_click_requires_exact_category_and_value():
 
 
 def test_intermediate_tool_click_cannot_fall_through_to_screen_change():
-    result = IntentCompiler(calibration()).compile(Intent(IntentKind.ZONE, target="residential", point=(0.6, 0.6)))
-    action = result.actions[0]
+    action = IntentCompiler(calibration()).compile(Intent(IntentKind.ZONE, target="residential", point=(0.6, 0.6))).actions[0]
     before = CityState(residential_demand=50)
     after = CityState(residential_demand=40)
-    observation = Observation(image=__import__("PIL.Image", fromlist=["new"]).new("RGB", (2, 2)), timestamp=0.0)
+    image = Image.new("RGB", (2, 2))
+    observation = Observation(screenshot=image, width=2, height=2)
     verified = LiveSemanticVerifier().verify(observation, observation, action.name, before_state=before, after_state=after, action=action)
     assert not verified.success
