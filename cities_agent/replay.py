@@ -8,11 +8,13 @@ from .state import CityState
 
 def action_to_dict(a: Action) -> dict:
     return {"type": a.type.value, "args": list(a.args), "safety": a.safety.value, "expected_effect": a.expected_effect,
-            "preconditions": list(a.preconditions), "max_retries": a.max_retries, "timeout_seconds": a.timeout_seconds}
+            "preconditions": list(a.preconditions), "max_retries": a.max_retries, "timeout_seconds": a.timeout_seconds,
+            "metadata": {k: v for k, v in a.metadata}}
 
 def action_from_dict(d: dict) -> Action:
+    metadata = tuple((str(k), str(v)) for k, v in dict(d.get("metadata", {})).items())
     return Action(ActionType(d["type"]), tuple(d.get("args", [])), SafetyClass(d.get("safety", "read_only")),
-                  d.get("expected_effect", ""), tuple(d.get("preconditions", [])), int(d.get("max_retries", 0)), float(d.get("timeout_seconds", 3.0)))
+                  d.get("expected_effect", ""), tuple(d.get("preconditions", [])), int(d.get("max_retries", 0)), float(d.get("timeout_seconds", 3.0)), metadata)
 
 def state_from_dict(d: dict | None) -> CityState | None:
     if d is None: return None
