@@ -12,7 +12,11 @@ def observation(width=1920, height=1080):
 
 
 def calibrated_guard(**kwargs):
-    guard = PilotGuard(PilotConfig(**kwargs))
+    guard = PilotGuard(
+        PilotConfig(**kwargs),
+        game_detector=lambda _observation: True,
+        foreground_checker=lambda: True,
+    )
     obs = observation()
     guard.set_calibration(Calibration(1920, 1080, {"center": (0.5, 0.5)}), obs)
     return guard, obs
@@ -50,6 +54,12 @@ def test_pilot_rejects_game_not_detected():
     result = guard.authorize(action, obs, state=CityState(simulation_paused=True))
     assert not result.ready
     assert "not detected" in result.reason
+
+
+def test_live_mode_defaults_to_real_window_checks():
+    guard = PilotGuard(PilotConfig(dry_run=False))
+    assert guard.game_detector.__self__ is guard.game_window
+    assert guard.foreground_checker.__self__ is guard.game_window
 
 
 def test_pilot_allows_read_only_without_real_input():
