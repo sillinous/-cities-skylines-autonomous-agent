@@ -6,6 +6,7 @@ from typing import Callable
 from .actions import Action, ActionResult, SafetyClass
 from .calibration import Calibration, CalibrationError
 from .perception import Observation
+from .windows import WindowsGameWindow
 
 
 @dataclass(frozen=True)
@@ -29,7 +30,12 @@ class PilotConfig:
 
 
 class PilotGuard:
-    """Safety boundary between planning and real OS input."""
+    """Safety boundary between planning and real OS input.
+
+    In live mode, the default game and foreground checks are backed by the
+    Windows game-window adapter rather than permissive callbacks. Tests and
+    other hosts can inject deterministic checkers explicitly.
+    """
 
     def __init__(
         self,
@@ -37,10 +43,22 @@ class PilotGuard:
         *,
         game_detector: Callable[[Observation], bool] | None = None,
         foreground_checker: Callable[[], bool] | None = None,
+        game_window: WindowsGameWindow | None = None,
     ):
         self.config = config or PilotConfig()
-        self.game_detector = game_detector or (lambda observation: True)
-        self.foreground_checker = foreground_checker or (lambda: True)
+        self.game_window = game_window or WindowsGameWindow()
+        if game_detector is not None:
+            self.game_detector = game_detector
+        elif self.config.dry_run:
+            self.game_detector = lambda observation: True
+        else:
+            self.game_detector = lambda observation: self.game_window.game_detected()
+        if foreground_checker is not None:
+            self.foreground_checker = foreground_checker
+        elif self.config.dry_run:
+            self.foreground_checker = lambda: True
+        else:
+            self.foreground_checker = self.game_window.is_foreground
         self.calibration: Calibration | None = None
         self.halted = False
         self.actions_this_cycle = 0
