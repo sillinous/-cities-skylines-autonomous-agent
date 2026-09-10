@@ -2,11 +2,11 @@
 
 Experimental Windows agent for observing and eventually operating Cities: Skylines through screen capture and mouse/keyboard control.
 
-## Phase 17 — bounded live agent loop
+## Current live-loop boundary
 
-The project now has a concrete live-loop boundary:
+The project now has a concrete, safety-bounded live-loop boundary:
 
-`screen -> state reader -> semantic intent -> calibrated compiler -> pilot preflight -> controller -> semantic verification -> telemetry/checkpoint`
+`screen -> state reader -> semantic intent -> calibrated compiler -> pilot preflight -> controller -> action-specific semantic verification -> telemetry/checkpoint`
 
 ### Current capabilities
 
@@ -14,9 +14,10 @@ The project now has a concrete live-loop boundary:
 - Structured, confidence-aware `CityState`, including service coverage and budget telemetry
 - Injectable vision backend with a safe no-op default
 - Semantic `Intent` model for observation, construction, zoning, utilities, services, bulldozing and budgets
-- Confidence validation before an intent can reach execution
-- Deterministic `VisionIntentPlanner` that converts intents into typed actions
+- Strict confidence validation before an intent can reach execution
+- Deterministic `VisionIntentPlanner` that converts model/vision proposals into typed actions
 - `IntentCompiler` translating validated semantic intents into calibrated low-level actions without dispatching OS input
+- Immutable compiler metadata linking each low-level action to its semantic kind, target/value and execution phase
 - Safety policy remains the final authorization boundary; the vision layer cannot dispatch input
 - Explicit read-only/reversible/destructive safety classes
 - Deterministic strategic manager and bounded multi-step planner
@@ -24,7 +25,7 @@ The project now has a concrete live-loop boundary:
 - Semantic construction and calibrated action mapping
 - Transactional plan executor with verification, retries and emergency stop
 - Recovery state machine, audit history and GitHub Actions CI
-- Append-only JSONL replay episodes that preserve actions, states and verification outcomes
+- Append-only JSONL replay episodes that preserve actions, states, verification outcomes and semantic action metadata
 - Deterministic replay of recorded action sequences against the simulator
 - Replay metrics for score, acceptance, verification failures, safety stops, money and population deltas
 - Strategy benchmark runner for comparing strategies across deterministic seeds
@@ -36,8 +37,9 @@ The project now has a concrete live-loop boundary:
 - Per-cycle pilot action budget and hard halt state
 - Windows game-window adapter for case-insensitive Cities: Skylines title detection, foreground validation and window resolution discovery
 - Resolution-bound calibration profiles that reject mismatched observations
-- `LivePilot` loop that connects observation, semantic intent, calibrated compilation, pilot gates, controller dispatch, verification, telemetry and logical checkpoints
-- Live-loop tests covering the default dry-run boundary and successful high-confidence semantic verification
+- `LivePilot` loop that connects observation, semantic intent, calibrated compilation, pilot gates, controller dispatch, semantic verification, telemetry and logical checkpoints
+- Action-specific verification contracts for zoning, road construction, utility recovery, service coverage and exact budget changes
+- Intermediate tool/panel actions are explicitly prevented from falling through to generic screen-change verification
 
 ### Safety contract
 
@@ -45,7 +47,7 @@ The controller will not send non-read-only input unless the corresponding safety
 
 The pilot layer adds independent preflight gates: the game must be detected, be the foreground application, have resolution-matched calibration, and normally be paused before input. Dry-run mode is the default and intentionally blocks real input.
 
-A successful OS-level mouse/keyboard dispatch is not considered a successful game action. Semantic state deltas are preferred. Generic screen changes are low-confidence evidence and cannot satisfy the default verification threshold.
+A successful OS-level mouse/keyboard dispatch is not considered a successful game action. State-bearing final actions must satisfy an action-specific deterministic verification contract. Generic screen changes are low-confidence evidence and cannot satisfy the default execution threshold. Intermediate tool-selection and panel-navigation actions cannot be accepted merely because the screen changed.
 
 The live loop halts on dispatch failure or insufficient verification confidence rather than continuing blindly. Per-cycle input is bounded. Telemetry and checkpoints record the decision boundary without granting additional execution authority.
 
@@ -82,5 +84,7 @@ Tesseract OCR must also be installed on Windows for OCR.
 11. Real save-game integration only after a separate backup/restore safety boundary is designed and tested
 12. ~~Calibrated semantic-to-input compiler~~ **Implemented**
 13. ~~Bounded live agent-loop integration~~ **Implemented**
-14. Real-game state verification with calibrated OCR/UI profiles
-15. Real-game action mapping for every supported semantic action, including utility placement and budget controls
+14. Real-game state verification with calibrated OCR/UI profiles **In progress**
+15. Real-game action mapping for every supported semantic action, including utility placement and budget controls **In progress**
+16. Dedicated UI evidence contracts for intermediate tool/panel states
+17. End-to-end Windows pilot validation with dry-run first, then separately authorized real-input testing
