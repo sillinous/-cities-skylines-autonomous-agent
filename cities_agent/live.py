@@ -9,11 +9,12 @@ from .calibration import Calibration
 from .checkpoint import Checkpoint, CheckpointStore
 from .compiler import IntentCompiler
 from .intent import Intent
+from .live_verification import LiveSemanticVerifier
 from .perception import Observation, ScreenObserver
 from .pilot import PilotGuard
 from .state import CityState
 from .telemetry import TelemetryLog, record_action
-from .verification import ActionVerifier, VerificationResult
+from .verification import VerificationResult
 
 
 @dataclass(frozen=True)
@@ -36,9 +37,8 @@ class LivePilot:
     all pass.
 
     Multi-action semantic intents are retained as a checkpointed pending queue.
-    This prevents a per-cycle action budget from silently discarding the rest of
-    a compiled transaction. Each dispatched sub-action still passes the pilot
-    gate and semantic verification before the next sub-action is attempted.
+    Each dispatched sub-action passes the pilot gate and semantic verification.
+    A halt preserves the pending queue as a logical recovery record.
     """
 
     def __init__(
@@ -50,7 +50,7 @@ class LivePilot:
         controller,
         pilot: PilotGuard,
         compiler: IntentCompiler | None = None,
-        verifier: ActionVerifier | None = None,
+        verifier=None,
         telemetry: TelemetryLog | None = None,
         audit: AuditLog | None = None,
         checkpoints: CheckpointStore | None = None,
@@ -62,7 +62,7 @@ class LivePilot:
         self.controller = controller
         self.pilot = pilot
         self.compiler = compiler
-        self.verifier = verifier or ActionVerifier()
+        self.verifier = verifier or LiveSemanticVerifier()
         self.telemetry = telemetry or TelemetryLog()
         self.audit = audit or AuditLog()
         self.checkpoints = checkpoints
@@ -78,11 +78,10 @@ class LivePilot:
 
     def halt(self, reason: str = "Live pilot halted.") -> None:
         self.halted = True
-        self.pending_actions = ()
         self.pilot.halt()
         self.controller.emergency_stop()
         self.audit.record("pilot_halt", reason)
-        self.telemetry.record("pilot_halt", reason)
+        self.telemetry.record("pilot_halt", reason, pending_actions=len(self.pending_actions))
 
     def run_once(self, *, max_actions: int = 1) -> LiveCycleResult:
         if self.halted:
@@ -110,6 +109,7 @@ class LivePilot:
             if self.compiler is None:
                 self.audit.record("pilot_stop", "Cannot compile intent without calibration")
                 self.halt("Calibration is required before compiling live input.")
+                self._checkpoint(state, self.pending_actions)
                 return LiveCycleResult(before, state, intent, (), (), (), True)
 
             compiled = self.compiler.compile(intent)
@@ -133,10 +133,10 @@ class LivePilot:
             if not gate.ready:
                 self.audit.record("pilot_rejected", gate.reason, action=action.name)
                 self.telemetry.record("pilot_rejected", gate.reason, action=action.name)
-                if action.safety != SafetyClass.READ_ONLY:
-                    self.halt(gate.reason)
                 results.append(ActionResult(action, False, False, gate.reason))
                 self.pending_actions = (action,) + self.pending_actions
+                if action.safety != SafetyClass.READ_ONLY:
+                    self.halt(gate.reason)
                 break
 
             record_action(self.telemetry, action, state=current_state)
@@ -165,6 +165,7 @@ class LivePilot:
                 self.telemetry.record("verification", verification.reason, action=action.name, success=verification.success, confidence=verification.confidence)
                 if not verification.success or verification.confidence < 0.80:
                     self.audit.record("verification_failed", verification.reason, action=action.name)
+                    self.pending_actions = (action,) + self.pending_actions
                     self.halt("Live action could not be semantically verified.")
                     break
                 current_observation, current_state = after, after_state
