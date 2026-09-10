@@ -34,6 +34,11 @@ class LivePilot:
     perception code can propose semantic intents, but no OS input is dispatched
     unless pilot preflight, safety policy, calibration, and foreground checks
     all pass.
+
+    Multi-action semantic intents are retained as a checkpointed pending queue.
+    This prevents a per-cycle action budget from silently discarding the rest of
+    a compiled transaction. Each dispatched sub-action still passes the pilot
+    gate and semantic verification before the next sub-action is attempted.
     """
 
     def __init__(
@@ -64,6 +69,7 @@ class LivePilot:
         self.episode_id = episode_id
         self.step = 0
         self.halted = False
+        self.pending_actions: tuple[Action, ...] = ()
 
     def set_calibration(self, calibration: Calibration, observation: Observation) -> None:
         self.pilot.set_calibration(calibration, observation)
@@ -72,6 +78,7 @@ class LivePilot:
 
     def halt(self, reason: str = "Live pilot halted.") -> None:
         self.halted = True
+        self.pending_actions = ()
         self.pilot.halt()
         self.controller.emergency_stop()
         self.audit.record("pilot_halt", reason)
@@ -82,43 +89,46 @@ class LivePilot:
             observation = self.observer.capture()
             state = self.state_reader(observation)
             return LiveCycleResult(observation, state, None, (), (), (), True)
+        if max_actions < 1:
+            raise ValueError("max_actions must be positive")
 
         self.pilot.reset_cycle()
         before = self.observer.capture()
         state = self.state_reader(before)
         self.telemetry.record("observation", "Live observation captured", width=before.width, height=before.height)
 
-        if self.pilot.config.require_calibration and self.pilot.calibration is not None:
-            self.pilot.calibration  # explicit for readability at the safety boundary
+        intent = None
+        if not self.pending_actions:
+            intent = self.intent_provider(before, state)
+            if intent is None:
+                self.telemetry.record("decision", "No intent proposed")
+                self._checkpoint(state, ())
+                self.step += 1
+                return LiveCycleResult(before, state, None, (), (), (), False)
 
-        intent = self.intent_provider(before, state)
-        if intent is None:
-            self.telemetry.record("decision", "No intent proposed")
-            self._checkpoint(state, ())
-            self.step += 1
-            return LiveCycleResult(before, state, None, (), (), (), False)
+            self.telemetry.record("intent", intent.kind.value, target=intent.target, confidence=intent.confidence)
+            if self.compiler is None:
+                self.audit.record("pilot_stop", "Cannot compile intent without calibration")
+                self.halt("Calibration is required before compiling live input.")
+                return LiveCycleResult(before, state, intent, (), (), (), True)
 
-        self.telemetry.record("intent", intent.kind.value, target=intent.target, confidence=intent.confidence)
-        if self.compiler is None:
-            self.audit.record("pilot_stop", "Cannot compile intent without calibration")
-            self.halt("Calibration is required before compiling live input.")
-            return LiveCycleResult(before, state, intent, (), (), (), True)
+            compiled = self.compiler.compile(intent)
+            if not compiled.actions:
+                self.audit.record("compile_rejected", compiled.reason)
+                self.telemetry.record("compile_rejected", compiled.reason)
+                self._checkpoint(state, ())
+                self.step += 1
+                return LiveCycleResult(before, state, intent, (), (), (), False)
+            self.pending_actions = tuple(compiled.actions)
 
-        compiled = self.compiler.compile(intent)
-        if not compiled.actions:
-            self.audit.record("compile_rejected", compiled.reason)
-            self.telemetry.record("compile_rejected", compiled.reason)
-            self._checkpoint(state, ())
-            self.step += 1
-            return LiveCycleResult(before, state, intent, (), (), (), False)
-
-        actions = tuple(compiled.actions[:max_actions])
+        actions_to_run = self.pending_actions[:max_actions]
+        self.pending_actions = self.pending_actions[len(actions_to_run):]
         results: list[ActionResult] = []
         verifications: list[VerificationResult] = []
         current_observation = before
         current_state = state
 
-        for action in actions:
+        for action in actions_to_run:
             gate = self.pilot.authorize(action, current_observation, state=current_state, max_actions=max_actions)
             if not gate.ready:
                 self.audit.record("pilot_rejected", gate.reason, action=action.name)
@@ -126,6 +136,7 @@ class LivePilot:
                 if action.safety != SafetyClass.READ_ONLY:
                     self.halt(gate.reason)
                 results.append(ActionResult(action, False, False, gate.reason))
+                self.pending_actions = (action,) + self.pending_actions
                 break
 
             record_action(self.telemetry, action, state=current_state)
@@ -134,6 +145,7 @@ class LivePilot:
             if not result.executed:
                 self.audit.record("dispatch_failed", result.reason, action=action.name)
                 self.telemetry.record("dispatch_failed", result.reason, action=action.name)
+                self.pending_actions = (action,) + self.pending_actions
                 self.halt(result.reason)
                 break
 
@@ -157,9 +169,9 @@ class LivePilot:
                     break
                 current_observation, current_state = after, after_state
 
-        self._checkpoint(current_state, actions)
+        self._checkpoint(current_state, self.pending_actions)
         self.step += 1
-        return LiveCycleResult(current_observation, current_state, intent, actions, tuple(results), tuple(verifications), self.halted)
+        return LiveCycleResult(current_observation, current_state, intent, actions_to_run, tuple(results), tuple(verifications), self.halted)
 
     def _checkpoint(self, state: CityState, pending: tuple[Action, ...]) -> None:
         if self.checkpoints is None:
