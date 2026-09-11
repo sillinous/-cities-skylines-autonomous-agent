@@ -1,4 +1,4 @@
-from PIL import Image, ImageChops
+from PIL import Image
 
 from cities_agent.actions import Action, ActionResult, ActionType
 from cities_agent.executor import PlanExecutor
@@ -27,15 +27,16 @@ class FakeController:
         self.stopped = True
 
 
-def test_executor_requires_strong_verification():
+def test_executor_rejects_weak_screen_change():
     controller = FakeController()
     executor = PlanExecutor(controller, FakeObserver(), min_verification_confidence=0.8)
     action = Action(ActionType.CLICK, (10, 10), expected_effect="click")
     plan = Plan([action], "test", steps=[PlanStep(0, action, CityState(), "click")])
     report = executor.execute(plan)
-    assert report.completed
-    assert report.results[0].verified
-    assert not controller.stopped
+    assert not report.completed
+    assert report.stopped
+    assert not report.results[0].verified
+    assert controller.stopped
 
 
 def test_executor_stops_when_no_effect_is_observed():
