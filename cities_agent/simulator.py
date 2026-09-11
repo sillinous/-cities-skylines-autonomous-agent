@@ -79,6 +79,9 @@ class MockCity:
         return replace(self.state, service_coverage=dict(self.state.service_coverage), budgets=dict(self.state.budgets), confidence=dict(self.state.confidence))
 
     def apply(self, action: Action) -> bool:
+        # Work on a private copy so references to an earlier state remain valid
+        # snapshots for evaluation, verification, and replay bookkeeping.
+        self.state = self._snapshot()
         accepted = True
         reason = "accepted"
         cost = 0
@@ -153,6 +156,7 @@ class MockCity:
         return (self.state.money or 0) >= cost
 
     def _simulate_time(self) -> None:
+        self.state = self._snapshot()
         self.state.money = (self.state.money or 0) + (self.state.weekly_income or 0)
         if self.state.population is not None:
             self.state.residential_demand = min(100, (self.state.residential_demand or 0) + 1)
