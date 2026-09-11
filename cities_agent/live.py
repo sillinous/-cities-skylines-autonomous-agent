@@ -9,6 +9,7 @@ from .calibration import Calibration
 from .checkpoint import Checkpoint, CheckpointStore
 from .compiler import IntentCompiler
 from .intent import Intent
+from .live_profile import LiveGameProfile
 from .live_verification import LiveSemanticVerifier
 from .perception import Observation, ScreenObserver
 from .pilot import PilotGuard
@@ -70,11 +71,35 @@ class LivePilot:
         self.step = 0
         self.halted = False
         self.pending_actions: tuple[Action, ...] = ()
+        self.profile: LiveGameProfile | None = None
 
     def set_calibration(self, calibration: Calibration, observation: Observation) -> None:
         self.pilot.set_calibration(calibration, observation)
         self.compiler = IntentCompiler(calibration)
         self.telemetry.record("calibration", "Calibration established", width=calibration.width, height=calibration.height)
+
+    def set_profile(self, profile: LiveGameProfile, observation: Observation, *, ocr=None) -> None:
+        """Install a validated real-game profile without enabling input.
+
+        The supplied observation must match both calibration and state-parser
+        resolution. The profile becomes the source of truth for calibrated
+        compilation, OCR state reading, and intermediate UI evidence.
+        """
+        profile.validate_observation(observation)
+        self.pilot.set_calibration(profile.calibration.calibration, observation)
+        self.compiler = profile.compiler()
+        self.state_reader = profile.state_reader(ocr)
+        if isinstance(self.verifier, LiveSemanticVerifier):
+            self.verifier.ui_evidence = profile.ui_verifier(ocr)
+        self.profile = profile
+        self.telemetry.record(
+            "profile",
+            "Live game profile established",
+            profile=profile.name,
+            width=observation.width,
+            height=observation.height,
+            ui_evidence=profile.ui_evidence_configured(),
+        )
 
     def halt(self, reason: str = "Live pilot halted.") -> None:
         self.halted = True
