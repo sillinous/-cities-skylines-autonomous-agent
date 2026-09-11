@@ -69,7 +69,7 @@ class CitiesSkylinesActionMapper:
         self._validate_point(spec.point)
         x, y = self._pixel(spec.point)
         return (
-            self.select_tool(spec.tool_anchor),
+            self.click_anchor(spec.tool_anchor),
             Action(ActionType.CLICK, (x, y), spec.safety, expected_effect=f"Place {spec.tool_anchor} at calibrated world point."),
         )
 
