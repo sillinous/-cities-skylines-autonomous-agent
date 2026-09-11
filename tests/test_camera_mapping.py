@@ -5,7 +5,7 @@ from cities_agent.actions import ActionType
 
 
 def calibration():
-    return Calibration(1920, 1080, {"viewport_center": (0.5, 0.5), "road": (0.1, 0.9)})
+    return Calibration(1920, 1080, {"viewport_center": (0.5, 0.5), "road:road": (0.1, 0.9)})
 
 
 def test_camera_pan_is_resolution_calibrated():
