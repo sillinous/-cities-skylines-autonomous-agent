@@ -1,9 +1,14 @@
 from __future__ import annotations
 
-import pyautogui
-
 from .actions import Action, ActionResult, ActionType
 from .policy import SafetyPolicy
+
+
+def _pyautogui():
+    """Load the OS-input backend only when an operation actually needs it."""
+    import pyautogui
+
+    return pyautogui
 
 
 class SafetyController:
@@ -17,6 +22,7 @@ class SafetyController:
 
     def emergency_stop(self):
         self.stopped = True
+        pyautogui = _pyautogui()
         for key in ("ctrl", "shift", "alt"):
             pyautogui.keyUp(key)
 
@@ -27,6 +33,7 @@ class SafetyController:
         if not authorized:
             return ActionResult(action, False, False, reason)
         try:
+            pyautogui = _pyautogui()
             if action.type == ActionType.OBSERVE:
                 return ActionResult(action, True, False, "Observation requested; no input dispatched.", 1)
             if action.type == ActionType.KEY:
