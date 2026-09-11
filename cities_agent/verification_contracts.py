@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Callable
 
@@ -29,14 +30,19 @@ def _effect(action: Action, kind: str) -> bool:
     return action.meta("semantic_kind") == kind and action.meta("phase") == "effect"
 
 
+def _legacy_target(effect: str, pattern: str) -> str | None:
+    match = re.search(pattern, effect, re.I)
+    return match.group(1).strip().lower() if match else None
+
+
 def default_contracts() -> dict[ActionType, VerificationContract]:
-    """Contracts for compiler output; legacy forms are handled separately."""
+    """Contracts for compiler output plus backward-compatible typed actions."""
 
     def zone(before: CityState, after: CityState, action: Action) -> bool:
         if _effect(action, "zone"):
             target = (action.meta("target") or "").lower()
-        elif action.type == ActionType.ZONE and action.args:
-            target = str(action.args[0]).lower()
+        elif action.type == ActionType.ZONE:
+            target = str(action.args[0]).lower() if action.args else _legacy_target(action.expected_effect, r"zone\s+([a-z]+)")
         else:
             return False
         field = {"residential": "residential_demand", "commercial": "commercial_demand", "industrial": "industrial_demand"}.get(target)
@@ -53,8 +59,8 @@ def default_contracts() -> dict[ActionType, VerificationContract]:
     def utility(before: CityState, after: CityState, action: Action) -> bool:
         if _effect(action, "utility"):
             target = (action.meta("target") or "").lower()
-        elif action.type == ActionType.UTILITY and action.args:
-            target = str(action.args[0]).lower()
+        elif action.type == ActionType.UTILITY:
+            target = str(action.args[0]).lower() if action.args else _legacy_target(action.expected_effect, r"restore\s+([a-z]+)")
         else:
             return False
         old = getattr(before, f"{target}_ok", None)
@@ -64,8 +70,8 @@ def default_contracts() -> dict[ActionType, VerificationContract]:
     def service(before: CityState, after: CityState, action: Action) -> bool:
         if _effect(action, "service"):
             target = (action.meta("target") or "").lower()
-        elif action.type == ActionType.SERVICE and action.args:
-            target = str(action.args[0]).lower()
+        elif action.type == ActionType.SERVICE:
+            target = str(action.args[0]).lower() if action.args else _legacy_target(action.expected_effect, r"service:([a-z]+)")
         else:
             return False
         old = before.service_coverage.get(target)
@@ -82,7 +88,10 @@ def default_contracts() -> dict[ActionType, VerificationContract]:
         elif action.type == ActionType.BUDGET and len(action.args) == 2:
             category, expected = str(action.args[0]).lower(), int(action.args[1])
         else:
-            return False
+            match = re.search(r"set\s+budget\s+([a-z]+)\s+to\s+(\d+)%", action.expected_effect, re.I)
+            if not match:
+                return False
+            category, expected = match.group(1).lower(), int(match.group(2))
         return after.budgets.get(category) == expected and before.budgets.get(category) != expected
 
     return {
