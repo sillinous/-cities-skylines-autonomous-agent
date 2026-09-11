@@ -54,8 +54,6 @@ class StrategicManager:
             problems.append("sewage")
         if state.money is not None and state.money < 0:
             problems.append("budget")
-        if state.traffic_percent is not None and state.traffic_percent < 30:
-            problems.append("traffic")
         if state.residential_demand is not None and state.residential_demand >= 40:
             problems.append("residential_demand")
         if state.commercial_demand is not None and state.commercial_demand >= 60:
@@ -74,8 +72,6 @@ class StrategicManager:
                 goals.append(Goal(GoalType.FIX_UTILITY, target=utility, priority=98, description=f"Restore {utility} service."))
         if state.money is not None and state.money < 5_000:
             goals.append(Goal(GoalType.MAINTAIN_BUDGET, priority=95, hard=True, description="Preserve a positive cash buffer."))
-        if state.traffic_percent is not None and state.traffic_percent < 30:
-            goals.append(Goal(GoalType.IMPROVE_TRAFFIC, priority=80, description="Improve traffic without reckless construction."))
         if state.residential_demand is not None and state.residential_demand >= 40:
             goals.append(Goal(GoalType.SATISFY_DEMAND, target="residential", priority=70, description="Satisfy residential demand."))
         if state.commercial_demand is not None and state.commercial_demand >= 60:
@@ -95,11 +91,12 @@ class StrategicManager:
             actions.append(Action(ActionType.ZONE, ("commercial",), SafetyClass.REVERSIBLE, expected_effect="Reduce commercial demand."))
         if state.industrial_demand is not None and state.industrial_demand >= 60:
             actions.append(Action(ActionType.ZONE, ("industrial",), SafetyClass.REVERSIBLE, expected_effect="Reduce industrial demand."))
-        if state.traffic_percent is not None and state.traffic_percent < 30 and (state.money or 0) >= 2_000:
-            actions.append(Action(ActionType.BUILD_ROAD, (), SafetyClass.REVERSIBLE, expected_effect="Improve modeled traffic."))
         return actions
 
     def evaluate(self, state: CityState, action: Action, simulator: MockCity | None = None) -> Candidate:
+        authorized, reason = self.policy.authorize(action)
+        if not authorized:
+            return Candidate(action, float("-inf"), reason, None)
         city = simulator.clone() if simulator else MockCity()
         city.set_state(state)
         evaluation = self.evaluator.evaluate(city, action)
@@ -112,13 +109,7 @@ class StrategicManager:
             self.audit.record("plan", "Hard safety goal selected observation-only mode.", action=action.name)
             return ManagerDecision(action, "A hard safety condition is active; observe before changing the city.", [], goals)
 
-        ranked = []
-        for action in self.candidates(state):
-            authorized, reason = self.policy.authorize(action)
-            if not authorized:
-                self.audit.record("candidate_blocked", reason, action=action.name)
-                continue
-            ranked.append(self.evaluate(state, action, simulator))
+        ranked = [self.evaluate(state, action, simulator) for action in self.candidates(state)]
         ranked.sort(key=lambda c: c.score, reverse=True)
         selected = ranked[0] if ranked and ranked[0].score > 0 else None
         if selected is None:
