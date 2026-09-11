@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 from .action_bundle import ActionBundle
-from .compiler import CompiledIntent
+from .compiler import CompileResult
 
 
-def bundle_from_compiled(compiled: CompiledIntent) -> ActionBundle | None:
-    """Convert a compiled semantic intent into a validated transactional bundle."""
+def bundle_from_compiled(compiled: CompileResult) -> ActionBundle | None:
+    """Turn a compiler result into a validated transaction without dispatching."""
     if not compiled.actions:
         return None
     intent_kind = compiled.actions[-1].meta("semantic_kind") or "unknown"
