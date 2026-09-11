@@ -33,7 +33,8 @@ class CitiesSkylinesActionMapper:
         return Action(ActionType.CLICK, (x, y), safety, expected_effect=f"Click calibrated anchor '{anchor}'.")
 
     def select_tool(self, anchor: str) -> Action:
-        return self.click_anchor(anchor)
+        x, y = self.calibration.pixel(anchor)
+        return Action(ActionType.SELECT_TOOL, (x, y), SafetyClass.REVERSIBLE, expected_effect=f"Select calibrated tool '{anchor}'.")
 
     def build_road(self, spec: BuildSpec) -> tuple[Action, ...]:
         self._validate_point(spec.start)
