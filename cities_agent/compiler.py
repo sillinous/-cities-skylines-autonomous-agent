@@ -17,9 +17,19 @@ class CompileResult:
 
 
 def _tag(actions: tuple[Action, ...], **metadata: str) -> tuple[Action, ...]:
-    """Attach immutable compiler facts without changing low-level action types."""
+    """Attach immutable compiler facts without changing semantic meaning."""
     tags = tuple((str(k), str(v)) for k, v in metadata.items())
     return tuple(replace(action, metadata=action.metadata + tags) for action in actions)
+
+
+def _tool_first(actions: tuple[Action, ...]) -> tuple[Action, ...]:
+    """Promote a mapper's first calibrated tool click to a typed tool action."""
+    if not actions:
+        return actions
+    first = actions[0]
+    if first.type != ActionType.CLICK:
+        return actions
+    return (replace(first, type=ActionType.SELECT_TOOL),) + actions[1:]
 
 
 def _effect_last(actions: tuple[Action, ...]) -> tuple[Action, ...]:
@@ -41,19 +51,19 @@ class IntentCompiler:
             if intent.kind == IntentKind.OBSERVE:
                 return CompileResult((Action(ActionType.OBSERVE),), "Observation intent.")
             if intent.kind == IntentKind.ZONE:
-                actions = _effect_last(_tag(self.mapper.zone(intent.target, intent.point), semantic_kind="zone", target=intent.target, phase="tool"))
+                actions = _effect_last(_tool_first(_tag(self.mapper.zone(intent.target, intent.point), semantic_kind="zone", target=intent.target, phase="tool")))
                 return CompileResult(actions, "Compiled zoning intent.")
             if intent.kind == IntentKind.CONSTRUCT:
-                actions = _effect_last(_tag(self.mapper.build_road(BuildSpec(intent.point, intent.end, intent.target or "road")), semantic_kind="construct", target=intent.target or "road", phase="tool"))
+                actions = _effect_last(_tool_first(_tag(self.mapper.build_road(BuildSpec(intent.point, intent.end, intent.target or "road")), semantic_kind="construct", target=intent.target or "road", phase="tool")))
                 return CompileResult(actions, "Compiled construction intent.")
             if intent.kind == IntentKind.UTILITY:
-                actions = _effect_last(_tag(self.mapper.utility(intent.target, intent.point), semantic_kind="utility", target=intent.target, phase="tool"))
+                actions = _effect_last(_tool_first(_tag(self.mapper.utility(intent.target, intent.point), semantic_kind="utility", target=intent.target, phase="tool")))
                 return CompileResult(actions, "Compiled utility placement intent.")
             if intent.kind == IntentKind.SERVICE:
-                actions = _effect_last(_tag(self.mapper.service(intent.target, intent.point), semantic_kind="service", target=intent.target, phase="tool"))
+                actions = _effect_last(_tool_first(_tag(self.mapper.service(intent.target, intent.point), semantic_kind="service", target=intent.target, phase="tool")))
                 return CompileResult(actions, "Compiled service placement intent.")
             if intent.kind == IntentKind.BULLDOZE:
-                actions = _effect_last(_tag(self.mapper.bulldoze(intent.point), semantic_kind="bulldoze", phase="tool"))
+                actions = _effect_last(_tool_first(_tag(self.mapper.bulldoze(intent.point), semantic_kind="bulldoze", phase="tool")))
                 return CompileResult(actions, "Compiled bulldoze intent.")
             if intent.kind == IntentKind.BUDGET:
                 actions = self.budget_controller.compile(intent.target, int(intent.value))
