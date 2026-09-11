@@ -21,8 +21,7 @@ class StateFieldRegion:
             raise ValueError(f"Invalid normalized region for {self.name}.")
         if x1 >= x2 or y1 >= y2:
             raise ValueError(f"Region '{self.name}' must have positive area.")
-        return (round(x1 * observation.width), round(y1 * observation.height),
-                round(x2 * observation.width), round(y2 * observation.height))
+        return (round(x1 * observation.width), round(y1 * observation.height), round(x2 * observation.width), round(y2 * observation.height))
 
 
 @dataclass(frozen=True)
@@ -35,10 +34,7 @@ class StateParserProfile:
 
     def validate(self, observation: Observation) -> None:
         if (observation.width, observation.height) != (self.width, self.height):
-            raise ValueError(
-                f"State parser profile expects {self.width}x{self.height}, "
-                f"got {observation.width}x{observation.height}."
-            )
+            raise ValueError(f"State parser profile expects {self.width}x{self.height}, got {observation.width}x{observation.height}.")
 
 
 @dataclass
@@ -141,21 +137,20 @@ class StateParser:
     @staticmethod
     def _utility_status(text: str, utility: str):
         lowered = text.lower()
-        bad = rf"{utility}[^\n]{{0,30}}(?:shortage|insufficient|out|failure|not enough|unserved)"
-        good = rf"{utility}[^\n]{{0,30}}(?:ok|adequate|sufficient|capacity)"
-        if re.search(bad, lowered):
+        labels = r"power|water|sewage"
+        match = re.search(rf"\b{re.escape(utility)}\b(?P<section>.*?)(?=\b(?:{labels})\b|$)", lowered)
+        if not match:
+            return None
+        section = match.group("section")
+        if re.search(r"\b(?:shortage|insufficient|out|failure|not enough|unserved)\b", section):
             return False
-        if re.search(good, lowered):
+        if re.search(r"\b(?:ok|adequate|sufficient|capacity)\b", section):
             return True
         return None
 
     @staticmethod
     def _warnings(text: str) -> list[str]:
-        return [
-            " ".join(line.split())
-            for line in text.splitlines()
-            if re.search(r"\b(warning|shortage|insufficient|not enough|unserved|problem)\b", line, re.I)
-        ]
+        return [" ".join(line.split()) for line in text.splitlines() if re.search(r"\b(warning|shortage|insufficient|not enough|unserved|problem)\b", line, re.I)]
 
     def ocr_prepare(self, image):
         from PIL import ImageOps
