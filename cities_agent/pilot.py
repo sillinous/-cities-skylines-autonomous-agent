@@ -35,12 +35,7 @@ class PilotConfig:
 
 
 class PilotGuard:
-    """Safety boundary between planning and real OS input.
-
-    In live mode, the default game and foreground checks are backed by the
-    Windows game-window adapter rather than permissive callbacks. Tests and
-    other hosts can inject deterministic checkers explicitly.
-    """
+    """Safety boundary between planning and real OS input."""
 
     def __init__(
         self,
@@ -108,14 +103,14 @@ class PilotGuard:
     def authorize(self, action: Action, observation: Observation, *, state=None, max_actions: int = 1) -> PreflightResult:
         if action.safety == SafetyClass.READ_ONLY:
             return PreflightResult(True, "Read-only action does not require pilot input.")
-        policy_ok, policy_reason = self.safety_policy.authorize(action)
-        if not policy_ok:
-            return PreflightResult(False, policy_reason)
         result = self.preflight(observation, state=state, max_actions=max_actions)
         if not result.ready:
             return result
         if self.config.dry_run:
             return PreflightResult(False, "Dry-run mode: real input is intentionally disabled.")
+        policy_ok, policy_reason = self.safety_policy.authorize(action)
+        if not policy_ok:
+            return PreflightResult(False, policy_reason)
         return result
 
     def record_dispatch(self) -> None:
