@@ -46,8 +46,6 @@ def test_live_pilot_defaults_to_dry_run_gate():
     observer = FakeObserver()
     controller = FakeController()
     guard = PilotGuard(PilotConfig(dry_run=True))
-    obs = observer.capture()
-    guard.set_calibration(Calibration(1920, 1080, {"center": (0.5, 0.5)}), obs)
     pilot = LivePilot(
         observer=observer,
         state_reader=lambda _: CityState(simulation_paused=True),
@@ -55,6 +53,8 @@ def test_live_pilot_defaults_to_dry_run_gate():
         controller=controller,
         pilot=guard,
     )
+    obs = observer.capture()
+    pilot.set_calibration(Calibration(1920, 1080, {"center": (0.5, 0.5)}), obs)
     result = pilot.run_once()
     assert result.halted
     assert controller.actions == []
@@ -65,8 +65,6 @@ def test_live_pilot_verifies_dispatched_action():
     observer = FakeObserver()
     controller = FakeController()
     guard = PilotGuard(live_config(), game_detector=lambda _observation: True, foreground_checker=lambda: True)
-    obs = observer.capture()
-    guard.set_calibration(Calibration(1920, 1080, {"center": (0.5, 0.5)}), obs)
     pilot = LivePilot(
         observer=observer,
         state_reader=lambda _: CityState(simulation_paused=True),
@@ -75,6 +73,8 @@ def test_live_pilot_verifies_dispatched_action():
         pilot=guard,
         verifier=FakeVerifier(),
     )
+    obs = observer.capture()
+    pilot.set_calibration(Calibration(1920, 1080, {"center": (0.5, 0.5)}), obs)
     result = pilot.run_once()
     assert not result.halted
     assert len(controller.actions) == 1
@@ -85,14 +85,6 @@ def test_live_pilot_preserves_unexecuted_compiled_actions():
     observer = FakeObserver()
     controller = FakeController()
     guard = PilotGuard(live_config(), game_detector=lambda _observation: True, foreground_checker=lambda: True)
-    obs = observer.capture()
-    calibration = Calibration(1920, 1080, {
-        "budget": (0.9, 0.1),
-        "budget:electricity": (0.8, 0.2),
-        "budget:slider_start": (0.5, 0.2),
-        "budget:slider_end": (0.7, 0.2),
-    })
-    guard.set_calibration(calibration, obs)
     pilot = LivePilot(
         observer=observer,
         state_reader=lambda _: CityState(simulation_paused=True),
@@ -101,8 +93,15 @@ def test_live_pilot_preserves_unexecuted_compiled_actions():
         pilot=guard,
         verifier=FakeVerifier(),
     )
-    from cities_agent.compiler import IntentCompiler
-    pilot.compiler = IntentCompiler(
+    obs = observer.capture()
+    calibration = Calibration(1920, 1080, {
+        "budget": (0.9, 0.1),
+        "budget:electricity": (0.8, 0.2),
+        "budget:slider_start": (0.5, 0.2),
+        "budget:slider_end": (0.7, 0.2),
+    })
+    pilot.set_calibration(calibration, obs)
+    pilot.compiler = __import__("cities_agent.compiler", fromlist=["IntentCompiler"]).IntentCompiler(
         calibration,
         budget_profile=BudgetControlProfile(category_anchors={"electricity": "budget:electricity"}),
     )
