@@ -27,7 +27,7 @@ def calibration():
 
 def test_zone_final_click_is_semantically_tagged():
     result = IntentCompiler(calibration()).compile(Intent(IntentKind.ZONE, target="residential", point=(0.6, 0.6)))
-    assert [a.type for a in result.actions] == [ActionType.CLICK, ActionType.CLICK]
+    assert [a.type for a in result.actions] == [ActionType.SELECT_TOOL, ActionType.CLICK]
     assert result.actions[0].meta("phase") == "tool"
     assert result.actions[1].meta("phase") == "effect"
     assert result.actions[1].meta("semantic_kind") == "zone"
