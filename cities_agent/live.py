@@ -3,8 +3,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Callable
 
+from .action_bundle import ActionBundle
 from .actions import Action, ActionResult, SafetyClass
 from .audit import AuditLog
+from .bundle_compiler import bundle_from_compiled
 from .calibration import Calibration
 from .checkpoint import Checkpoint, CheckpointStore
 from .compiler import IntentCompiler
@@ -37,9 +39,10 @@ class LivePilot:
     unless pilot preflight, safety policy, calibration, and foreground checks
     all pass.
 
-    Multi-action semantic intents are retained as a checkpointed pending queue.
-    Each dispatched sub-action passes the pilot gate and semantic verification.
-    A halt preserves the pending queue as a logical recovery record.
+    Multi-action semantic intents are retained as a validated transactional
+    bundle and checkpointed as a pending queue. Each dispatched sub-action
+    passes the pilot gate and semantic verification; the bundle never grants
+    execution authority by itself.
     """
 
     def __init__(
@@ -71,6 +74,7 @@ class LivePilot:
         self.step = 0
         self.halted = False
         self.pending_actions: tuple[Action, ...] = ()
+        self.pending_bundle: ActionBundle | None = None
         self.profile: LiveGameProfile | None = None
 
     def set_calibration(self, calibration: Calibration, observation: Observation) -> None:
@@ -123,6 +127,7 @@ class LivePilot:
 
         intent = None
         if not self.pending_actions:
+            self.pending_bundle = None
             intent = self.intent_provider(before, state)
             if intent is None:
                 self.telemetry.record("decision", "No intent proposed")
@@ -144,7 +149,31 @@ class LivePilot:
                 self._checkpoint(state, ())
                 self.step += 1
                 return LiveCycleResult(before, state, intent, (), (), (), False)
-            self.pending_actions = tuple(compiled.actions)
+
+            try:
+                bundle = bundle_from_compiled(compiled)
+            except ValueError as exc:
+                self.audit.record("bundle_rejected", str(exc))
+                self.telemetry.record("bundle_rejected", str(exc), intent=intent.kind.value)
+                self.halt("Compiled semantic action bundle failed transactional validation.")
+                self._checkpoint(state, ())
+                return LiveCycleResult(before, state, intent, (), (), (), True)
+            if bundle is None:
+                self.audit.record("bundle_rejected", "Compiled intent produced no executable bundle")
+                self.telemetry.record("bundle_rejected", "Compiled intent produced no executable bundle", intent=intent.kind.value)
+                self.halt("Compiled intent produced no executable transaction bundle.")
+                self._checkpoint(state, ())
+                return LiveCycleResult(before, state, intent, (), (), (), True)
+
+            self.pending_bundle = bundle
+            self.pending_actions = bundle.pending
+            self.telemetry.record(
+                "bundle",
+                "Validated semantic action bundle",
+                intent_kind=bundle.intent_kind,
+                phases="|".join(bundle.phases()),
+                actions=len(bundle.actions),
+            )
 
         actions_to_run = self.pending_actions[:max_actions]
         self.pending_actions = self.pending_actions[len(actions_to_run):]
